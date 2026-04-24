@@ -1,19 +1,19 @@
 :root {
-  --bg-top: #b8edf7;
-  --bg-bottom: #f4d487;
-  --panel: rgba(36, 59, 73, 0.72);
-  --panel-border: rgba(238, 247, 239, 0.28);
+  --bg-top: #a5d4e6;
+  --bg-bottom: #efcc78;
+  --panel: rgba(41, 78, 97, 0.58);
+  --panel-border: rgba(221, 243, 245, 0.14);
   --text: #f7f0d3;
   --ink: #20384a;
   --accent: #f4efc8;
   --accent-strong: #ffc76f;
   --sea-deep: #1d5f80;
-  --sea-mid: #2e88a9;
-  --sea-shallow: #62b9ca;
+  --sea-mid: #2582a6;
+  --sea-shallow: #48abc3;
   --danger: #ff7a68;
   --success: #b8e29a;
-  --shadow-pixel: rgba(12, 28, 40, 0.22);
-  --panel-highlight: rgba(255, 255, 255, 0.08);
+  --shadow-pixel: rgba(12, 28, 40, 0.16);
+  --panel-highlight: rgba(255, 255, 255, 0.06);
 }
 
 * {
@@ -35,6 +35,7 @@ body {
 body {
   min-height: 100dvh;
   padding: 0;
+  overflow: hidden;
 }
 
 .game-shell {
@@ -49,34 +50,30 @@ body {
 .panel {
   background: var(--panel);
   border: 1px solid var(--panel-border);
-  box-shadow: 0 18px 50px var(--shadow-pixel);
-  backdrop-filter: blur(10px);
+  box-shadow: 0 12px 30px var(--shadow-pixel);
+  backdrop-filter: blur(8px);
 }
 
 .hud {
   position: absolute;
-  top: max(12px, env(safe-area-inset-top));
+  top: max(8px, env(safe-area-inset-top));
   left: 50%;
   z-index: 3;
-  width: min(calc(100% - 20px), 460px);
+  width: min(calc(100% - 16px), 680px);
   transform: translateX(-50%);
-  padding: 10px 12px;
-  border-radius: 24px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.02)),
-    var(--panel);
+  padding: 6px;
+  border-radius: 18px;
+  background: rgba(40, 78, 97, 0.42);
 }
 
-.eyebrow,
 .kicker,
 .label {
   text-transform: uppercase;
   letter-spacing: 0.18em;
-  font-size: 0.58rem;
-  opacity: 0.72;
+  font-size: 0.56rem;
+  opacity: 0.68;
 }
 
-.brand h1,
 .panel h2,
 .game-over-line,
 .catch-popup p {
@@ -86,31 +83,25 @@ body {
   line-height: 1.1;
 }
 
-.brand h1 {
-  font-size: clamp(1rem, 3vw, 1.3rem);
-  color: var(--accent);
-  text-shadow: 0 1px 1px rgba(0, 0, 0, 0.18);
-}
-
 .hud-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
-  margin-top: 8px;
 }
 
 .stat-card {
-  border-radius: 16px;
-  padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  padding: 8px 10px 9px;
+  background: rgba(255, 255, 255, 0.06);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .stat-card strong {
   display: block;
-  margin-top: 2px;
-  font-size: 0.86rem;
+  margin-top: 3px;
+  font-size: 1.08rem;
+  line-height: 1;
 }
 
 .danger strong {
@@ -188,10 +179,10 @@ canvas {
 }
 
 .catch-popup {
-  top: 18%;
-  min-width: min(72%, 420px);
-  padding: 16px 18px;
-  border-radius: 28px;
+  top: 14%;
+  min-width: min(76%, 420px);
+  padding: 18px 18px 16px;
+  border-radius: 24px;
   text-align: center;
   color: var(--ink);
   background: rgba(247, 240, 215, 0.94);
@@ -200,14 +191,22 @@ canvas {
   animation: catch-pop 250ms ease-out;
 }
 
+.catch-sprite {
+  display: block;
+  width: 112px;
+  height: 62px;
+  margin: 0 auto 8px;
+  image-rendering: pixelated;
+}
+
 .catch-popup p {
-  font-size: 1.2rem;
+  font-size: 1.1rem;
 }
 
 .catch-popup strong {
   display: block;
   margin-top: 6px;
-  font-size: 2rem;
+  font-size: 1.7rem;
 }
 
 .message-banner {
@@ -215,7 +214,7 @@ canvas {
   width: min(calc(100% - 28px), 520px);
   padding: 16px 22px;
   border-radius: 40px;
-  background: rgba(42, 60, 68, 0.9);
+  background: rgba(42, 60, 68, 0.92);
   border: 1px solid rgba(255, 247, 224, 0.08);
   box-shadow: 0 18px 40px rgba(10, 20, 48, 0.22);
   font-weight: 700;
@@ -285,15 +284,15 @@ canvas {
 @media (max-width: 560px) {
   .hud {
     width: calc(100% - 16px);
-    padding: 9px 10px;
-  }
-
-  .brand h1 {
-    font-size: 0.92rem;
+    padding: 5px;
   }
 
   .hud-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .stat-card strong {
+    font-size: 0.96rem;
   }
 
   .playfield-frame {
@@ -309,6 +308,11 @@ canvas {
     top: 14%;
     min-width: calc(100% - 20px);
     padding: 14px 12px;
+  }
+
+  .catch-sprite {
+    width: 96px;
+    height: 54px;
   }
 
   .catch-popup strong {

@@ -1,7 +1,3 @@
-const canvas = document.getElementById("gameCanvas");
-const ctx = canvas.getContext("2d");
-ctx.imageSmoothingEnabled = true;
-
 const timerEl = document.getElementById("timer");
 const catchCountEl = document.getElementById("catch-count");
 const bestCatchEl = document.getElementById("best-catch");
@@ -9,6 +5,8 @@ const riskMeterEl = document.getElementById("risk-meter");
 const catchPopupEl = document.getElementById("catch-popup");
 const catchSpeciesEl = document.getElementById("catch-species");
 const catchWeightEl = document.getElementById("catch-weight");
+const catchSpriteCanvas = document.getElementById("catch-sprite");
+const catchSpriteCtx = catchSpriteCanvas.getContext("2d");
 const messageBannerEl = document.getElementById("message-banner");
 const startOverlayEl = document.getElementById("start-overlay");
 const endOverlayEl = document.getElementById("end-overlay");
@@ -20,746 +18,737 @@ const resultCatchCountEl = document.getElementById("result-catch-count");
 const resultBestFishEl = document.getElementById("result-best-fish");
 const resultTotalWeightEl = document.getElementById("result-total-weight");
 
-const WIDTH = canvas.width;
-const HEIGHT = canvas.height;
-const WATERLINE_Y = HEIGHT * 0.14;
-const SHORE_Y = HEIGHT * 0.9;
+catchSpriteCtx.imageSmoothingEnabled = false;
+
+const GAME_WIDTH = 900;
+const GAME_HEIGHT = 1400;
+const WATERLINE_Y = GAME_HEIGHT * 0.14;
+const SHORE_Y = GAME_HEIGHT * 0.9;
 const SESSION_SECONDS = 150;
 
 const fishTable = [
-  { species: "Australian Salmon", min: 1.2, max: 4.8, color: "#d9d8c8", score: 1 },
-  { species: "Tailor", min: 0.8, max: 2.9, color: "#c6dfeb", score: 1 },
-  { species: "Bonito", min: 1.8, max: 5.5, color: "#d8e6ef", score: 2 },
-  { species: "Yellowtail Kingfish", min: 4.5, max: 14.2, color: "#b9d0b0", score: 3 },
-  { species: "Tuna", min: 6.5, max: 18.5, color: "#8fd2ea", score: 4 },
-  { species: "Mackerel", min: 1.4, max: 6.4, color: "#dcca74", score: 2 },
-  { species: "Trevally", min: 2.0, max: 8.0, color: "#c8d8e1", score: 2 },
-  { species: "Queenfish", min: 3.5, max: 10.8, color: "#a8d8ef", score: 3 },
-  { species: "Dolphinfish", min: 5.0, max: 15.0, color: "#d7e887", score: 4 },
-  { species: "Cobia", min: 7.0, max: 19.0, color: "#9fc5da", score: 4 },
+  { species: "Australian Salmon", min: 1.2, max: 4.8, color: 0xd8d8c9, score: 1 },
+  { species: "Tailor", min: 0.8, max: 2.9, color: 0xc4deea, score: 1 },
+  { species: "Bonito", min: 1.8, max: 5.5, color: 0xd8e5ef, score: 2 },
+  { species: "Yellowtail Kingfish", min: 4.5, max: 14.2, color: 0xbad1af, score: 3 },
+  { species: "Tuna", min: 6.5, max: 18.5, color: 0x8dd2e9, score: 4 },
+  { species: "Mackerel", min: 1.4, max: 6.4, color: 0xddca76, score: 2 },
+  { species: "Trevally", min: 2.0, max: 8.0, color: 0xc8d9e2, score: 2 },
+  { species: "Queenfish", min: 3.5, max: 10.8, color: 0xa7d7ee, score: 3 },
+  { species: "Dolphinfish", min: 5.0, max: 15.0, color: 0xd7e888, score: 4 },
+  { species: "Cobia", min: 7.0, max: 19.0, color: 0x9fc5da, score: 4 },
 ];
 
-const game = {
-  active: false,
-  ended: false,
-  timeLeft: SESSION_SECONDS,
-  fish: [],
-  ripples: [],
-  particles: [],
-  stats: null,
-  pointerDown: false,
-  holdBoost: false,
-  lastTick: 0,
-  messageTimeout: null,
-  popupTimeout: null,
-  hookedFish: null,
-  player: {
-    x: WIDTH * 0.5,
-    y: SHORE_Y,
-  },
-  lure: {
-    state: "idle",
-    x: WIDTH * 0.5,
-    y: SHORE_Y - 46,
-    startX: WIDTH * 0.5,
-    startY: SHORE_Y - 46,
-    targetX: WIDTH * 0.5,
-    targetY: SHORE_Y - 300,
-    travel: 0,
-    retrieveSpeed: 220,
-    twitchPower: 0,
-  },
+const dom = {
+  timerEl,
+  catchCountEl,
+  bestCatchEl,
+  riskMeterEl,
+  catchPopupEl,
+  catchSpeciesEl,
+  catchWeightEl,
+  messageBannerEl,
+  startOverlayEl,
+  endOverlayEl,
+  endHeadlineEl,
+  endSubheadlineEl,
+  resultCatchCountEl,
+  resultBestFishEl,
+  resultTotalWeightEl,
 };
 
-function makeStats() {
-  return {
-    catches: 0,
-    totalWeight: 0,
-    bestWeight: 0,
-    bestFish: null,
-    sharkChance: 0.05,
-    streak: 0,
-  };
-}
+class BoringtideScene extends Phaser.Scene {
+  constructor() {
+    super("BoringtideScene");
+    this.isRunning = false;
+    this.timeLeft = SESSION_SECONDS;
+    this.stats = null;
+    this.fish = [];
+    this.splashes = [];
+    this.hookedFight = null;
+    this.pointerHeld = false;
+    this.holdBoost = false;
+    this.holdStart = 0;
+    this.audio = { ready: false, context: null, nodes: null };
+  }
 
-function resetGame() {
-  game.active = false;
-  game.ended = false;
-  game.timeLeft = SESSION_SECONDS;
-  game.ripples = [];
-  game.particles = [];
-  game.stats = makeStats();
-  game.pointerDown = false;
-  game.holdBoost = false;
-  game.lastTick = 0;
-  game.hookedFish = null;
-  game.lure = {
-    state: "idle",
-    x: WIDTH * 0.5,
-    y: SHORE_Y - 46,
-    startX: WIDTH * 0.5,
-    startY: SHORE_Y - 46,
-    targetX: WIDTH * 0.5,
-    targetY: SHORE_Y - 300,
-    travel: 0,
-    retrieveSpeed: 220,
-    twitchPower: 0,
-  };
-  spawnFish();
-  updateHud();
-  hideCatchPopup();
-  setMessage("Tap the water to cast");
-}
+  create() {
+    this.cameras.main.setBackgroundColor("#2f88aa");
+    this.createBackground();
+    this.createEntities();
+    this.createInput();
+    this.resetSession();
+  }
 
-function spawnFish() {
-  game.fish = [];
-  const count = 18;
-  for (let i = 0; i < count; i += 1) {
-    const lane = Math.random();
-    game.fish.push({
-      x: 80 + Math.random() * (WIDTH - 160),
-      y: WATERLINE_Y + 60 + Math.random() * (HEIGHT * 0.58),
-      speed: 40 + Math.random() * 100,
-      dir: Math.random() > 0.5 ? 1 : -1,
-      size: 14 + Math.random() * 22,
-      interest: 0.3 + Math.random() * 0.7,
-      depth: lane,
-      wiggle: Math.random() * Math.PI * 2,
-      speciesIndex: Math.floor(Math.random() * fishTable.length),
+  createBackground() {
+    this.skyGraphics = this.add.graphics();
+    this.waterBands = this.add.graphics();
+    this.shoreGraphics = this.add.graphics();
+    this.drawBackground();
+  }
+
+  createEntities() {
+    this.player = this.add.container(GAME_WIDTH * 0.5, SHORE_Y - 4);
+    const playerBody = this.add.graphics();
+    playerBody.fillStyle(0x213f52, 1);
+    playerBody.fillEllipse(0, -22, 56, 48);
+    playerBody.fillStyle(0xee7a57, 1);
+    playerBody.fillRect(-18, -6, 36, 28);
+    playerBody.fillStyle(0xffca74, 1);
+    playerBody.fillCircle(0, -46, 16);
+    playerBody.fillStyle(0x4b6656, 1);
+    playerBody.fillEllipse(0, 16, 20, 12);
+    playerBody.lineStyle(4, 0x6a4a2b, 1);
+    playerBody.beginPath();
+    playerBody.moveTo(4, -18);
+    playerBody.lineTo(4, -76);
+    playerBody.lineTo(34, -98);
+    playerBody.strokePath();
+    this.player.add(playerBody);
+
+    this.lineGraphics = this.add.graphics();
+
+    this.lure = this.add.container(this.player.x, this.player.y - 42);
+    this.lureBall = this.add.graphics();
+    this.lureBall.fillStyle(0xfff783, 1);
+    this.lureBall.fillCircle(0, 0, 8);
+    this.lureBall.fillStyle(0xef8b5f, 1);
+    this.lureBall.fillCircle(3, -1, 4);
+    this.lure.add(this.lureBall);
+    this.lureState = "idle";
+    this.lureTarget = new Phaser.Math.Vector2(this.player.x, this.player.y - 42);
+    this.lureVelocity = new Phaser.Math.Vector2();
+  }
+
+  createInput() {
+    this.input.on("pointerdown", (pointer) => {
+      if (!this.isRunning) {
+        return;
+      }
+      this.ensureAudioReady();
+      this.pointerHeld = true;
+      this.holdBoost = false;
+      this.holdStart = performance.now();
+
+      const worldPoint = this.scalePointer(pointer);
+      if (this.lureState === "hooked") {
+        this.setMessage("Fish on!");
+        return;
+      }
+
+      if (this.lureState === "retrieving") {
+        this.lureVelocity.add(new Phaser.Math.Vector2(Phaser.Math.Between(-18, 18), Phaser.Math.Between(-12, 12)));
+        this.setMessage("Twitch!");
+        return;
+      }
+
+      if (this.lureState !== "idle") {
+        return;
+      }
+
+      if (worldPoint.y < SHORE_Y - 12) {
+        this.castLure(worldPoint.x, worldPoint.y);
+      }
+    });
+
+    this.input.on("pointerup", () => {
+      this.pointerHeld = false;
+      this.holdBoost = false;
+    });
+
+    this.input.on("pointerout", () => {
+      this.pointerHeld = false;
+      this.holdBoost = false;
     });
   }
-}
 
-function startGame() {
-  resetGame();
-  game.active = true;
-  startOverlayEl.classList.add("hidden");
-  endOverlayEl.classList.add("hidden");
-  setMessage("Tide is running");
-}
-
-function endGame(reason) {
-  game.active = false;
-  game.ended = true;
-  endOverlayEl.classList.remove("hidden");
-  if (reason === "shark") {
-    endHeadlineEl.textContent = "NOT SO BORING NOW";
-    endSubheadlineEl.textContent = "LINE SNAP!";
-    setMessage("Shark hooked. Session over.");
-  } else {
-    endHeadlineEl.textContent = "Tide Finished";
-    endSubheadlineEl.textContent = "The bite window has closed.";
-    setMessage("Tide window ended.");
-  }
-  resultCatchCountEl.textContent = String(game.stats.catches);
-  resultBestFishEl.textContent = game.stats.bestFish
-    ? `${game.stats.bestFish.species} ${game.stats.bestFish.weight.toFixed(1)} kg`
-    : "None";
-  resultTotalWeightEl.textContent = `${game.stats.totalWeight.toFixed(1)} kg`;
-}
-
-function updateHud() {
-  const minutes = Math.floor(game.timeLeft / 60);
-  const seconds = Math.floor(game.timeLeft % 60)
-    .toString()
-    .padStart(2, "0");
-  timerEl.textContent = `${minutes}:${seconds}`;
-  catchCountEl.textContent = String(game.stats.catches);
-  bestCatchEl.textContent = game.stats.bestFish
-    ? `${game.stats.bestFish.species.split(" ")[0]} ${game.stats.bestFish.weight.toFixed(1)}kg`
-    : "None";
-
-  const risk = game.stats.sharkChance;
-  if (risk < 0.1) {
-    riskMeterEl.textContent = "Low";
-  } else if (risk < 0.18) {
-    riskMeterEl.textContent = "Rising";
-  } else if (risk < 0.28) {
-    riskMeterEl.textContent = "Spicy";
-  } else {
-    riskMeterEl.textContent = "Danger";
-  }
-}
-
-function setMessage(text) {
-  messageBannerEl.textContent = text;
-}
-
-function showCatchPopup(species, weight) {
-  catchSpeciesEl.textContent = species;
-  catchWeightEl.textContent = `${weight.toFixed(1)} kg`;
-  catchPopupEl.classList.remove("hidden");
-  clearTimeout(game.popupTimeout);
-  game.popupTimeout = setTimeout(hideCatchPopup, 1400);
-}
-
-function hideCatchPopup() {
-  catchPopupEl.classList.add("hidden");
-}
-
-function pointerToCanvas(event) {
-  const rect = canvas.getBoundingClientRect();
-  const touch = event.touches ? event.touches[0] : event;
-  return {
-    x: ((touch.clientX - rect.left) / rect.width) * WIDTH,
-    y: ((touch.clientY - rect.top) / rect.height) * HEIGHT,
-  };
-}
-
-function castLure(x, y) {
-  if (!game.active) {
-    return;
+  resetSession() {
+    this.stopReelScream();
+    this.timeLeft = SESSION_SECONDS;
+    this.stats = {
+      catches: 0,
+      totalWeight: 0,
+      bestWeight: 0,
+      bestFish: null,
+      sharkChance: 0.05,
+    };
+    this.hookedFight = null;
+    this.lureState = "idle";
+    this.lure.setPosition(this.player.x, this.player.y - 42);
+    this.lureTarget.set(this.player.x, this.player.y - 42);
+    this.lureVelocity.set(0, 0);
+    this.clearFish();
+    this.spawnFish();
+    this.clearSplashes();
+    this.updateHud();
+    this.hideCatchPopup();
+    this.setMessage("Tap the water to cast");
   }
 
-  if (game.lure.state === "hooked") {
-    setMessage("Fish on!");
-    return;
+  clearFish() {
+    this.fish.forEach((fish) => fish.container.destroy());
+    this.fish = [];
   }
 
-  if (game.lure.state === "retrieving") {
-    game.lure.twitchPower = 1;
-    setMessage("Twitch!");
-    return;
+  clearSplashes() {
+    this.splashes.forEach((splash) => splash.destroy());
+    this.splashes = [];
   }
 
-  if (game.lure.state !== "idle") {
-    return;
+  spawnFish() {
+    for (let i = 0; i < 18; i += 1) {
+      const speciesIndex = Phaser.Math.Between(0, fishTable.length - 1);
+      const species = fishTable[speciesIndex];
+      const scale = Phaser.Math.FloatBetween(0.82, 1.35);
+      const fish = {
+        speciesIndex,
+        dir: Math.random() > 0.5 ? 1 : -1,
+        speed: Phaser.Math.Between(36, 110),
+        interest: Phaser.Math.FloatBetween(0.3, 0.95),
+        size: Phaser.Math.FloatBetween(18, 34) * scale,
+        depth: Math.random(),
+        wiggle: Math.random() * Math.PI * 2,
+        hooked: false,
+        container: this.makeFishSprite(species.color, scale),
+      };
+      fish.container.setPosition(
+        Phaser.Math.Between(40, GAME_WIDTH - 40),
+        Phaser.Math.Between(WATERLINE_Y + 60, SHORE_Y - 150)
+      );
+      fish.container.setScale(fish.dir, 1);
+      fish.container.alpha = 0.92;
+      this.fish.push(fish);
+    }
   }
 
-  const clampedY = Math.min(Math.max(y, WATERLINE_Y + 30), SHORE_Y - 120);
-  const clampedX = Math.min(Math.max(x, 70), WIDTH - 70);
-  game.lure.state = "casting";
-  game.lure.startX = game.player.x;
-  game.lure.startY = game.player.y - 52;
-  game.lure.targetX = clampedX;
-  game.lure.targetY = clampedY;
-  game.lure.travel = 0;
-  setMessage("Casting...");
-}
-
-function handleLanding() {
-  addRipple(game.lure.x, game.lure.y, 18);
-  setMessage("Retrieve");
-  game.lure.state = "retrieving";
-}
-
-function addRipple(x, y, radius) {
-  game.ripples.push({
-    x,
-    y,
-    radius,
-    life: 1,
-  });
-}
-
-function addBurst(x, y, count, color) {
-  for (let i = 0; i < count; i += 1) {
-    const angle = Math.random() * Math.PI * 2;
-    const speed = 40 + Math.random() * 150;
-    game.particles.push({
-      x,
-      y,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed,
-      life: 0.8 + Math.random() * 0.4,
-      color,
-    });
-  }
-}
-
-function tryHookFish(dt) {
-  if (game.lure.state !== "retrieving") {
-    return;
+  makeFishSprite(color, scale) {
+    const container = this.add.container(0, 0);
+    const g = this.add.graphics();
+    g.fillStyle(color, 1);
+    g.fillEllipse(0, 0, 48 * scale, 20 * scale);
+    g.beginPath();
+    g.moveTo(-20 * scale, 0);
+    g.lineTo(-36 * scale, -10 * scale);
+    g.lineTo(-36 * scale, 10 * scale);
+    g.closePath();
+    g.fillPath();
+    g.fillStyle(0x496577, 1);
+    g.fillCircle(13 * scale, -1 * scale, Math.max(2, 2.6 * scale));
+    container.add(g);
+    return container;
   }
 
-  const effectiveRange = 34 + game.lure.twitchPower * 18;
-  for (const fish of game.fish) {
-    const dx = fish.x - game.lure.x;
-    const dy = fish.y - game.lure.y;
-    const distance = Math.hypot(dx, dy);
+  scalePointer(pointer) {
+    const x = (pointer.x / this.scale.width) * GAME_WIDTH;
+    const y = (pointer.y / this.scale.height) * GAME_HEIGHT;
+    return new Phaser.Math.Vector2(x, y);
+  }
+
+  castLure(x, y) {
+    this.lureState = "casting";
+    this.castStart = new Phaser.Math.Vector2(this.player.x, this.player.y - 42);
+    this.castTarget = new Phaser.Math.Vector2(
+      Phaser.Math.Clamp(x, 60, GAME_WIDTH - 60),
+      Phaser.Math.Clamp(y, WATERLINE_Y + 30, SHORE_Y - 120)
+    );
+    this.castProgress = 0;
+    this.setMessage("Casting...");
+  }
+
+  startSession() {
+    this.resetSession();
+    this.isRunning = true;
+    dom.startOverlayEl.classList.add("hidden");
+    dom.endOverlayEl.classList.add("hidden");
+    this.setMessage("Tide is running");
+  }
+
+  endSession(reason) {
+    this.isRunning = false;
+    this.stopReelScream();
+    dom.endOverlayEl.classList.remove("hidden");
+    if (reason === "shark") {
+      dom.endHeadlineEl.textContent = "NOT SO BORING NOW";
+      dom.endSubheadlineEl.textContent = "LINE SNAP!";
+      this.setMessage("Shark hooked. Session over.");
+    } else {
+      dom.endHeadlineEl.textContent = "Tide Finished";
+      dom.endSubheadlineEl.textContent = "The bite window has closed.";
+      this.setMessage("Tide window ended.");
+    }
+    dom.resultCatchCountEl.textContent = String(this.stats.catches);
+    dom.resultBestFishEl.textContent = this.stats.bestFish
+      ? `${this.stats.bestFish.species} ${this.stats.bestFish.weight.toFixed(1)} kg`
+      : "None";
+    dom.resultTotalWeightEl.textContent = `${this.stats.totalWeight.toFixed(1)} kg`;
+  }
+
+  update(_, deltaMs) {
+    const dt = Math.min(0.033, deltaMs / 1000);
+    if (this.pointerHeld && performance.now() - this.holdStart > 160) {
+      this.holdBoost = true;
+    }
+
+    this.updateSplashes(dt);
+
+    if (!this.isRunning) {
+      this.drawLine();
+      return;
+    }
+
+    this.timeLeft = Math.max(0, this.timeLeft - dt);
+    if (this.timeLeft === 0) {
+      this.endSession("tide");
+      this.drawLine();
+      return;
+    }
+
+    this.updateFish(dt);
+    this.updateLure(dt);
+    this.updateHud();
+    this.drawLine();
+  }
+
+  updateFish(dt) {
+    for (const fish of this.fish) {
+      if (fish.hooked) {
+        continue;
+      }
+      fish.wiggle += dt * (1.8 + fish.depth);
+      fish.container.x += fish.dir * fish.speed * dt;
+      fish.container.y += Math.sin(fish.wiggle) * 10 * dt;
+
+      if (fish.container.x < -60) {
+        fish.container.x = GAME_WIDTH + 60;
+      } else if (fish.container.x > GAME_WIDTH + 60) {
+        fish.container.x = -60;
+      }
+
+      const dx = this.lure.x - fish.container.x;
+      const dy = this.lure.y - fish.container.y;
+      const distance = Math.hypot(dx, dy);
+      if (this.lureState === "retrieving" && distance < 180) {
+        fish.container.x += (dx / (distance || 1)) * fish.interest * 18 * dt;
+        fish.container.y += (dy / (distance || 1)) * fish.interest * 18 * dt;
+      }
+
+      if (this.lureState === "retrieving") {
+        this.tryHookFish(fish, dt, distance);
+      }
+    }
+  }
+
+  updateLure(dt) {
+    if (this.lureState === "casting") {
+      this.castProgress = Math.min(1, this.castProgress + dt * 2.6);
+      const arc = Math.sin(this.castProgress * Math.PI) * 120;
+      this.lure.x = Phaser.Math.Linear(this.castStart.x, this.castTarget.x, this.castProgress);
+      this.lure.y = Phaser.Math.Linear(this.castStart.y, this.castTarget.y, this.castProgress) - arc;
+      if (this.castProgress >= 1) {
+        this.addSplash(this.lure.x, this.lure.y, 22, 0xd7f2fb);
+        this.lureState = "retrieving";
+        this.setMessage("Retrieve");
+      }
+      return;
+    }
+
+    if (this.lureState === "retrieving") {
+      const target = new Phaser.Math.Vector2(this.player.x, this.player.y - 42);
+      const speed = (this.holdBoost ? 1.4 : 1) * 165;
+      const toTarget = target.clone().subtract(new Phaser.Math.Vector2(this.lure.x, this.lure.y));
+      if (toTarget.length() < 16) {
+        this.lureState = "idle";
+        this.lure.setPosition(target.x, target.y);
+        this.setMessage("Tap the water to cast");
+      } else {
+        toTarget.normalize().scale(speed * dt);
+        this.lure.x += toTarget.x + this.lureVelocity.x * dt;
+        this.lure.y += toTarget.y + this.lureVelocity.y * dt;
+        this.lureVelocity.scale(0.88);
+      }
+      if (Math.random() < 0.14) {
+        this.addRipple(this.lure.x, this.lure.y + 8, Phaser.Math.FloatBetween(5, 9));
+      }
+      return;
+    }
+
+    if (this.lureState === "hooked") {
+      this.updateHookedFight(dt);
+      return;
+    }
+
+    this.lure.setPosition(this.player.x, this.player.y - 42);
+  }
+
+  tryHookFish(fish, dt, distance) {
+    const effectiveRange = 36;
     if (distance > fish.size * 1.6 + effectiveRange) {
-      continue;
+      return;
     }
 
-    const strikeChance =
-      (0.18 + fish.interest * 0.28 + game.lure.twitchPower * 0.15 + (game.holdBoost ? 0.04 : 0)) * dt;
-
+    const strikeChance = (0.18 + fish.interest * 0.28 + (this.holdBoost ? 0.04 : 0)) * dt;
     if (Math.random() >= strikeChance) {
-      continue;
+      return;
     }
 
-    const sharkRoll = Math.random();
-    if (sharkRoll < game.stats.sharkChance) {
-      addBurst(game.lure.x, game.lure.y, 32, "#ff7b5d");
-      game.lure.state = "idle";
-      endGame("shark");
+    if (Math.random() < this.stats.sharkChance) {
+      this.addBurst(this.lure.x, this.lure.y, 36, 0xff7b5d);
+      this.lureState = "idle";
+      this.endSession("shark");
       return;
     }
 
     const speciesData = fishTable[fish.speciesIndex];
     const weight = speciesData.min + Math.random() * (speciesData.max - speciesData.min);
-    beginHookedFight(fish, speciesData, weight);
-    return;
+    this.beginFight(fish, speciesData, weight);
   }
-}
 
-function beginHookedFight(fish, speciesData, weight) {
-  const dx = fish.x - game.player.x;
-  const dy = fish.y - (game.player.y - 52);
-  const baseAngle = Math.atan2(dy, dx);
-  const runAngle = baseAngle + (Math.random() > 0.5 ? 1 : -1) * (0.3 + Math.random() * 0.45);
-  const runDistance = Math.min(260, 120 + weight * 9);
+  beginFight(fish, speciesData, weight) {
+    fish.hooked = true;
+    const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y - 42, fish.container.x, fish.container.y);
+    this.hookedFight = {
+      fish,
+      species: speciesData.species,
+      color: speciesData.color,
+      weight,
+      score: speciesData.score,
+      heading: angle + (Math.random() > 0.5 ? 1 : -1) * Phaser.Math.FloatBetween(0.4, 0.9),
+      speed: 110 + weight * 11,
+      turnTimer: 0.12,
+      runDuration: Math.max(1.1, weight * 0.42),
+      runElapsed: 0,
+      reelDuration: Math.max(1.4, weight * 0.58),
+      reelElapsed: 0,
+      runDistanceLimit: Math.min(320, 140 + weight * 10),
+      pulledDistance: 0,
+      sway: Math.random() * Math.PI * 2,
+    };
+    this.lureState = "hooked";
+    this.addBurst(this.lure.x, this.lure.y, 12, speciesData.color);
+    this.addSplash(this.lure.x, this.lure.y, 24, speciesData.color);
+    this.startReelScream(weight);
+    this.setMessage(`${speciesData.species} hooked`);
+  }
 
-  fish.hooked = true;
-  game.lure.state = "hooked";
-  game.hookedFish = {
-    fish,
-    species: speciesData.species,
-    color: speciesData.color,
-    weight,
-    runElapsed: 0,
-    runDuration: 0.45 + weight * 0.055,
-    reelElapsed: 0,
-    reelDuration: 1.4 + weight * 0.14,
-    originX: game.lure.x,
-    originY: game.lure.y,
-    runTargetX: clamp(game.lure.x + Math.cos(runAngle) * runDistance, 50, WIDTH - 50),
-    runTargetY: clamp(game.lure.y + Math.sin(runAngle) * runDistance, WATERLINE_Y + 30, SHORE_Y - 140),
-    sway: Math.random() * Math.PI * 2,
-  };
-
-  addBurst(game.lure.x, game.lure.y, 12, speciesData.color);
-  setMessage(`${speciesData.species} hooked`);
-}
-
-function updateFish(dt) {
-  for (const fish of game.fish) {
-    if (fish.hooked) {
-      continue;
+  updateHookedFight(dt) {
+    const fight = this.hookedFight;
+    if (!fight) {
+      this.lureState = "idle";
+      this.stopReelScream();
+      return;
     }
 
-    fish.wiggle += dt * (1.8 + fish.depth);
-    fish.x += fish.dir * fish.speed * dt;
-    fish.y += Math.sin(fish.wiggle) * 10 * dt;
+    fight.sway += dt * (4.2 + fight.weight * 0.1);
+    if (fight.runElapsed < fight.runDuration) {
+      fight.runElapsed = Math.min(fight.runDuration, fight.runElapsed + dt);
+      fight.turnTimer -= dt;
+      if (fight.turnTimer <= 0) {
+        fight.turnTimer = 0.08 + Math.random() * 0.18;
+        fight.heading += (Math.random() - 0.5) * 1.6;
+        fight.speed = 100 + fight.weight * 10 + Math.random() * 75;
+      }
 
-    if (fish.x < -80) {
-      fish.x = WIDTH + 80;
-    } else if (fish.x > WIDTH + 80) {
-      fish.x = -80;
+      const step = fight.speed * dt;
+      fight.pulledDistance += step;
+      this.lure.x = Phaser.Math.Clamp(this.lure.x + Math.cos(fight.heading) * step, 26, GAME_WIDTH - 26);
+      this.lure.y = Phaser.Math.Clamp(this.lure.y + Math.sin(fight.heading) * step, WATERLINE_Y + 24, SHORE_Y - 138);
+      if (fight.pulledDistance > fight.runDistanceLimit) {
+        fight.heading += Math.PI * 0.9 + (Math.random() - 0.5) * 0.8;
+        fight.pulledDistance *= 0.62;
+      }
+      fight.fish.container.setPosition(this.lure.x, this.lure.y);
+      if (Math.random() < 0.58) {
+        this.addRipple(this.lure.x, this.lure.y + 6, Phaser.Math.FloatBetween(8, 13));
+        this.addSplash(this.lure.x, this.lure.y, Phaser.Math.Between(10, 16), fight.color);
+      }
+      this.updateReelScream(0.82, 1 + fight.weight * 0.02);
+      this.setMessage(`Fish running... ${fight.weight.toFixed(1)}kg`);
+      return;
     }
 
-    const lureDx = game.lure.x - fish.x;
-    const lureDy = game.lure.y - fish.y;
-    const lureDistance = Math.hypot(lureDx, lureDy);
+    const boost = this.holdBoost ? 1.18 : 1;
+    fight.reelElapsed = Math.min(fight.reelDuration, fight.reelElapsed + dt * boost);
+    const t = easeInOutQuad(fight.reelElapsed / fight.reelDuration);
+    const sway = Math.max(12, 28 - fight.weight * 0.28);
+    this.lure.x = Phaser.Math.Linear(this.lure.x, this.player.x, dt * (0.42 + boost * 0.22));
+    this.lure.y = Phaser.Math.Linear(this.lure.y, this.player.y - 42, dt * (0.36 + boost * 0.18));
+    this.lure.x += Math.sin(fight.sway) * sway * (1 - t);
+    this.lure.y += Math.cos(fight.sway * 0.7) * sway * 0.55 * (1 - t);
+    fight.fish.container.setPosition(this.lure.x, this.lure.y);
+    if (Math.random() < 0.24) {
+      this.addRipple(this.lure.x, this.lure.y + 6, Phaser.Math.FloatBetween(5, 9));
+      this.addSplash(this.lure.x, this.lure.y, Phaser.Math.Between(5, 9), fight.color);
+    }
+    this.updateReelScream(this.holdBoost ? 0.5 : 0.35, 0.7 + fight.weight * 0.015);
+    this.setMessage(this.holdBoost ? `Reeling hard... ${fight.species}` : `Reeling in ${fight.species}`);
 
-    if (game.lure.state === "retrieving" && lureDistance < 180) {
-      fish.x += (lureDx / (lureDistance || 1)) * fish.interest * 18 * dt;
-      fish.y += (lureDy / (lureDistance || 1)) * fish.interest * 18 * dt;
+    if (fight.reelElapsed >= fight.reelDuration) {
+      this.landFight();
     }
   }
-}
 
-function updateLure(dt) {
-  const lure = game.lure;
-  if (lure.state === "casting") {
-    lure.travel += dt * 2.6;
-    const arc = Math.sin(Math.min(lure.travel, 1) * Math.PI) * 120;
-    lure.x = lerp(lure.startX, lure.targetX, Math.min(lure.travel, 1));
-    lure.y = lerp(lure.startY, lure.targetY, Math.min(lure.travel, 1)) - arc;
-    if (lure.travel >= 1) {
-      lure.x = lure.targetX;
-      lure.y = lure.targetY;
-      handleLanding();
-    }
-  } else if (lure.state === "retrieving") {
-    const boost = game.holdBoost ? 1.8 : 1;
-    const speed = lure.retrieveSpeed * boost + lure.twitchPower * 140;
-    const dx = game.player.x - lure.x;
-    const dy = game.player.y - 52 - lure.y;
-    const distance = Math.hypot(dx, dy);
-
-    if (distance < 18) {
-      lure.state = "idle";
-      lure.x = game.player.x;
-      lure.y = game.player.y - 46;
-      setMessage("Tap the water to cast");
-    } else {
-      lure.x += (dx / distance) * speed * dt;
-      lure.y += (dy / distance) * speed * dt;
+  landFight() {
+    const fight = this.hookedFight;
+    if (!fight) {
+      return;
     }
 
-    if (Math.random() < 0.14) {
-      addRipple(lure.x, lure.y + 8, 4 + Math.random() * 6);
+    this.stopReelScream();
+    this.stats.catches += 1;
+    this.stats.totalWeight += fight.weight;
+    this.stats.sharkChance = Math.min(0.42, this.stats.sharkChance + 0.012 + fight.score * 0.003);
+    if (!this.stats.bestFish || fight.weight > this.stats.bestWeight) {
+      this.stats.bestWeight = fight.weight;
+      this.stats.bestFish = { species: fight.species, weight: fight.weight };
     }
 
-    lure.twitchPower = Math.max(0, lure.twitchPower - dt * 2.4);
-  } else if (lure.state === "hooked") {
-    updateHookedFish(dt);
-  } else {
-    lure.x = game.player.x;
-    lure.y = game.player.y - 46;
-  }
-}
+    fight.fish.hooked = false;
+    fight.fish.speciesIndex = Phaser.Math.Between(0, fishTable.length - 1);
+    fight.fish.container.setPosition(-80, Phaser.Math.Between(WATERLINE_Y + 80, SHORE_Y - 180));
+    fight.fish.dir *= -1;
+    fight.fish.container.setScale(fight.fish.dir, 1);
 
-function updateHookedFish(dt) {
-  const hooked = game.hookedFish;
-  if (!hooked) {
-    game.lure.state = "idle";
-    return;
+    this.showCatchPopup(fight.species, fight.weight);
+    this.addBurst(this.lure.x, this.lure.y, 18, fight.color);
+    this.hookedFight = null;
+    this.lureState = "idle";
+    this.lure.setPosition(this.player.x, this.player.y - 42);
+    this.updateHud();
+    this.setMessage(`${fight.species} landed`);
   }
 
-  hooked.sway += dt * (3.4 + hooked.weight * 0.08);
-  if (hooked.runElapsed < hooked.runDuration) {
-    hooked.runElapsed = Math.min(hooked.runDuration, hooked.runElapsed + dt);
-    const t = easeOutCubic(hooked.runElapsed / hooked.runDuration);
-    game.lure.x = lerp(hooked.originX, hooked.runTargetX, t);
-    game.lure.y = lerp(hooked.originY, hooked.runTargetY, t);
-    hooked.fish.x = game.lure.x;
-    hooked.fish.y = game.lure.y;
-    if (Math.random() < 0.28) {
-      addRipple(game.lure.x, game.lure.y + 6, 6 + Math.random() * 8);
+  addRipple(x, y, radius) {
+    const ripple = this.add.circle(x, y, radius, 0xffffff, 0);
+    ripple.setStrokeStyle(2, 0xdcf5ff, 0.5);
+    ripple.life = 0.8;
+    this.splashes.push(ripple);
+  }
+
+  addSplash(x, y, count, color) {
+    for (let i = 0; i < count; i += 1) {
+      const drop = this.add.circle(x, y, Phaser.Math.Between(2, 5), Math.random() > 0.65 ? color : 0xd7f2fb, 0.9);
+      drop.vx = Math.cos(-Math.PI / 2 + (Math.random() - 0.5) * 1.8) * Phaser.Math.Between(30, 130);
+      drop.vy = Math.sin(-Math.PI / 2 + (Math.random() - 0.5) * 1.8) * Phaser.Math.Between(30, 130);
+      drop.life = Phaser.Math.FloatBetween(0.35, 0.8);
+      drop.isDrop = true;
+      this.splashes.push(drop);
     }
-    setMessage(`Fish running... ${hooked.weight.toFixed(1)}kg`);
-    return;
   }
 
-  const reelBoost = game.holdBoost ? 1.65 : 1;
-  hooked.reelElapsed = Math.min(hooked.reelDuration, hooked.reelElapsed + dt * reelBoost);
-  const t = easeInOutQuad(hooked.reelElapsed / hooked.reelDuration);
-  const targetX = game.player.x;
-  const targetY = game.player.y - 46;
-  const swayAmount = Math.max(8, 20 - hooked.weight * 0.35);
-  game.lure.x = lerp(hooked.runTargetX, targetX, t) + Math.sin(hooked.sway) * swayAmount * (1 - t);
-  game.lure.y = lerp(hooked.runTargetY, targetY, t) + Math.cos(hooked.sway * 0.7) * swayAmount * 0.45 * (1 - t);
-  hooked.fish.x = game.lure.x;
-  hooked.fish.y = game.lure.y;
-  if (Math.random() < 0.18) {
-    addRipple(game.lure.x, game.lure.y + 6, 4 + Math.random() * 6);
-  }
-  setMessage(game.holdBoost ? `Reeling hard... ${hooked.species}` : `Reeling in ${hooked.species}`);
-
-  if (hooked.reelElapsed >= hooked.reelDuration) {
-    landHookedFish();
-  }
-}
-
-function landHookedFish() {
-  const hooked = game.hookedFish;
-  if (!hooked) {
-    return;
+  addBurst(x, y, count, color) {
+    this.addSplash(x, y, count, color);
   }
 
-  game.stats.catches += 1;
-  game.stats.totalWeight += hooked.weight;
-  game.stats.streak += 1;
-  game.stats.sharkChance = Math.min(0.42, game.stats.sharkChance + 0.012 + getSpeciesScore(hooked.species) * 0.003);
-
-  if (!game.stats.bestFish || hooked.weight > game.stats.bestWeight) {
-    game.stats.bestWeight = hooked.weight;
-    game.stats.bestFish = { species: hooked.species, weight: hooked.weight };
+  updateSplashes(dt) {
+    this.splashes = this.splashes.filter((splash) => {
+      splash.life -= dt;
+      if (splash.isDrop) {
+        splash.x += splash.vx * dt;
+        splash.y += splash.vy * dt;
+        splash.vx *= 0.97;
+        splash.vy *= 0.97;
+        splash.setAlpha(Math.max(0, splash.life));
+      } else {
+        splash.radius += 42 * dt;
+        splash.setRadius(splash.radius);
+        splash.setStrokeStyle(2, 0xdcf5ff, Math.max(0, splash.life * 0.55));
+      }
+      if (splash.life <= 0) {
+        splash.destroy();
+        return false;
+      }
+      return true;
+    });
   }
 
-  hooked.fish.hooked = false;
-  hooked.fish.x = -50;
-  hooked.fish.y = WATERLINE_Y + 70 + Math.random() * (HEIGHT * 0.55);
-  hooked.fish.speciesIndex = Math.floor(Math.random() * fishTable.length);
-  hooked.fish.dir *= -1;
-
-  showCatchPopup(hooked.species, hooked.weight);
-  setMessage(`${hooked.species} landed`);
-  addBurst(game.lure.x, game.lure.y, 14, hooked.color);
-  game.hookedFish = null;
-  game.lure.state = "idle";
-  game.lure.x = game.player.x;
-  game.lure.y = game.player.y - 46;
-  updateHud();
-}
-
-function updateRipples(dt) {
-  game.ripples = game.ripples.filter((ripple) => {
-    ripple.radius += 50 * dt;
-    ripple.life -= dt * 0.8;
-    return ripple.life > 0;
-  });
-}
-
-function updateParticles(dt) {
-  game.particles = game.particles.filter((particle) => {
-    particle.x += particle.vx * dt;
-    particle.y += particle.vy * dt;
-    particle.vx *= 0.97;
-    particle.vy *= 0.97;
-    particle.life -= dt;
-    return particle.life > 0;
-  });
-}
-
-function updateTimer(dt) {
-  if (!game.active) {
-    return;
+  drawLine() {
+    this.lineGraphics.clear();
+    this.lineGraphics.lineStyle(2, 0xfff6d6, 1);
+    this.lineGraphics.beginPath();
+    this.lineGraphics.moveTo(this.player.x, this.player.y - 42);
+    this.lineGraphics.lineTo(this.lure.x, this.lure.y);
+    this.lineGraphics.strokePath();
   }
-  game.timeLeft = Math.max(0, game.timeLeft - dt);
-  if (game.timeLeft === 0) {
-    endGame("tide");
-  }
-}
 
-function drawBackground() {
-  ctx.clearRect(0, 0, WIDTH, HEIGHT);
+  drawBackground() {
+    this.skyGraphics.clear();
+    this.waterBands.clear();
+    this.shoreGraphics.clear();
 
-  const sky = ctx.createLinearGradient(0, 0, 0, WATERLINE_Y);
-  sky.addColorStop(0, "#a8dfef");
-  sky.addColorStop(1, "#b8edf7");
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, WIDTH, WATERLINE_Y);
+    this.skyGraphics.fillStyle(0xa4d6e6, 1);
+    this.skyGraphics.fillRect(0, 0, GAME_WIDTH, WATERLINE_Y);
 
-  ctx.fillStyle = "#3ba2bd";
-  ctx.fillRect(0, WATERLINE_Y, WIDTH, HEIGHT - WATERLINE_Y);
-
-  ctx.fillStyle = "#f5cf7d";
-  ctx.fillRect(0, SHORE_Y, WIDTH, HEIGHT - SHORE_Y);
-
-  const bands = 6;
-  for (let i = 0; i < bands; i += 1) {
-    const y = WATERLINE_Y + i * ((SHORE_Y - WATERLINE_Y) / bands);
-    const alpha = 0.08 + i * 0.02;
-    ctx.fillStyle = `rgba(255,255,255,${alpha})`;
-    ctx.fillRect(0, y, WIDTH, 4);
-  }
-}
-
-function drawFish() {
-  for (const fish of game.fish) {
-    if (fish.hooked) {
-      continue;
+    this.waterBands.fillGradientStyle(0x3ea7c0, 0x3ea7c0, 0x1b5a7d, 0x1b5a7d, 1);
+    this.waterBands.fillRect(0, WATERLINE_Y, GAME_WIDTH, SHORE_Y - WATERLINE_Y);
+    for (let i = 0; i < 5; i += 1) {
+      const y = WATERLINE_Y + 8 + i * ((SHORE_Y - WATERLINE_Y) / 5);
+      this.waterBands.fillStyle(0xb9e5f2, 0.38);
+      this.waterBands.fillRect(0, y, GAME_WIDTH, 4);
     }
-    const species = fishTable[fish.speciesIndex];
-    ctx.save();
-    ctx.translate(fish.x, fish.y);
-    ctx.scale(fish.dir, 1);
-    ctx.globalAlpha = 0.55 + fish.depth * 0.35;
-    drawSoftFish(fish.size * 1.55, fish.size * 0.7, species.color);
-    ctx.restore();
-  }
-  ctx.globalAlpha = 1;
-}
 
-function drawRipples() {
-  for (const ripple of game.ripples) {
-    ctx.strokeStyle = `rgba(220, 245, 255, ${ripple.life * 0.55})`;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(ripple.x, ripple.y, ripple.radius, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-}
-
-function drawParticles() {
-  for (const particle of game.particles) {
-    ctx.fillStyle = particle.color;
-    ctx.globalAlpha = Math.max(0, particle.life);
-    ctx.beginPath();
-    ctx.arc(particle.x, particle.y, 4, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.globalAlpha = 1;
-}
-
-function drawPlayerAndLure() {
-  const { player, lure } = game;
-
-  ctx.strokeStyle = "#fff6d6";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(player.x, player.y - 42);
-  ctx.lineTo(lure.x, lure.y);
-  ctx.stroke();
-
-  drawSoftAngler(player.x, player.y);
-  drawSoftLure(lure.x, lure.y);
-}
-
-function drawDangerFlash() {
-  if (game.active) {
-    return;
-  }
-  if (endHeadlineEl.textContent !== "NOT SO BORING NOW") {
-    return;
-  }
-  const pulse = 0.18 + Math.sin(performance.now() * 0.02) * 0.08;
-  ctx.fillStyle = `rgba(255, 60, 50, ${pulse})`;
-  ctx.fillRect(0, 0, WIDTH, HEIGHT);
-}
-
-function draw() {
-  drawBackground();
-  drawFish();
-  drawRipples();
-  drawParticles();
-  drawPlayerAndLure();
-  drawDangerFlash();
-}
-
-function loop(timestamp) {
-  if (!game.lastTick) {
-    game.lastTick = timestamp;
-  }
-  const dt = Math.min(0.033, (timestamp - game.lastTick) / 1000);
-  game.lastTick = timestamp;
-
-  if (game.active) {
-    updateTimer(dt);
-    updateFish(dt);
-    updateLure(dt);
-    updateRipples(dt);
-    updateParticles(dt);
-    tryHookFish(dt);
-    updateHud();
-  } else {
-    updateRipples(dt);
-    updateParticles(dt);
+    this.shoreGraphics.fillStyle(0xf5cf7d, 1);
+    this.shoreGraphics.fillRect(0, SHORE_Y, GAME_WIDTH, GAME_HEIGHT - SHORE_Y);
   }
 
-  draw();
-  requestAnimationFrame(loop);
+  showCatchPopup(species, weight) {
+    catchSpeciesEl.textContent = species;
+    catchWeightEl.textContent = `${weight.toFixed(1)} kg`;
+    drawCatchSprite(species);
+    catchPopupEl.classList.remove("hidden");
+    clearTimeout(this.popupTimer);
+    this.popupTimer = setTimeout(() => this.hideCatchPopup(), 1800);
+  }
+
+  hideCatchPopup() {
+    catchPopupEl.classList.add("hidden");
+  }
+
+  setMessage(text) {
+    messageBannerEl.textContent = text;
+  }
+
+  updateHud() {
+    const minutes = Math.floor(this.timeLeft / 60);
+    const seconds = Math.floor(this.timeLeft % 60)
+      .toString()
+      .padStart(2, "0");
+    timerEl.textContent = `${minutes}:${seconds}`;
+    catchCountEl.textContent = String(this.stats.catches);
+    bestCatchEl.textContent = this.stats.bestFish
+      ? `${this.stats.bestFish.species.split(" ")[0]} ${this.stats.bestFish.weight.toFixed(1)}kg`
+      : "None";
+
+    const risk = this.stats.sharkChance;
+    riskMeterEl.textContent = risk < 0.1 ? "Low" : risk < 0.18 ? "Rising" : risk < 0.28 ? "Hot" : "Danger";
+  }
+
+  ensureAudioReady() {
+    if (this.audio.ready) {
+      if (this.audio.context && this.audio.context.state === "suspended") {
+        this.audio.context.resume();
+      }
+      return;
+    }
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) {
+      return;
+    }
+    this.audio.context = new AudioCtx();
+    this.audio.ready = true;
+  }
+
+  startReelScream(weight) {
+    if (!this.audio.ready || !this.audio.context) {
+      return;
+    }
+    this.stopReelScream();
+    const ctxAudio = this.audio.context;
+    const master = ctxAudio.createGain();
+    const tone = ctxAudio.createOscillator();
+    const wobble = ctxAudio.createOscillator();
+    const wobbleGain = ctxAudio.createGain();
+    const filter = ctxAudio.createBiquadFilter();
+
+    tone.type = "sawtooth";
+    tone.frequency.value = 320 + weight * 10;
+    wobble.type = "triangle";
+    wobble.frequency.value = 8;
+    wobbleGain.gain.value = 18;
+    filter.type = "bandpass";
+    filter.frequency.value = 900;
+    filter.Q.value = 1.5;
+    master.gain.value = 0.0001;
+
+    wobble.connect(wobbleGain);
+    wobbleGain.connect(tone.frequency);
+    tone.connect(filter);
+    filter.connect(master);
+    master.connect(ctxAudio.destination);
+
+    const now = ctxAudio.currentTime;
+    master.gain.exponentialRampToValueAtTime(0.028, now + 0.05);
+    tone.start();
+    wobble.start();
+
+    this.audio.nodes = { master, tone, wobble, filter };
+  }
+
+  updateReelScream(intensity, tension) {
+    if (!this.audio.nodes || !this.audio.context) {
+      return;
+    }
+    const now = this.audio.context.currentTime;
+    const base = 310 + tension * 180;
+    this.audio.nodes.tone.frequency.setTargetAtTime(base + Math.random() * 30, now, 0.04);
+    this.audio.nodes.filter.frequency.setTargetAtTime(720 + intensity * 900, now, 0.06);
+    this.audio.nodes.master.gain.setTargetAtTime(0.01 + intensity * 0.03, now, 0.05);
+  }
+
+  stopReelScream() {
+    if (!this.audio.nodes || !this.audio.context) {
+      return;
+    }
+    const { master, tone, wobble } = this.audio.nodes;
+    const now = this.audio.context.currentTime;
+    master.gain.setTargetAtTime(0.0001, now, 0.07);
+    tone.stop(now + 0.15);
+    wobble.stop(now + 0.15);
+    this.audio.nodes = null;
+  }
 }
 
-function lerp(a, b, t) {
-  return a + (b - a) * t;
-}
+function drawCatchSprite(species) {
+  const fish = fishTable.find((entry) => entry.species === species) || fishTable[0];
+  catchSpriteCtx.clearRect(0, 0, catchSpriteCanvas.width, catchSpriteCanvas.height);
+  const pixels = [
+    "......................",
+    "...........11.........",
+    "......222222221.......",
+    "..222222222222211.....",
+    "2222222222222222211...",
+    "..222222222222211.....",
+    "......222222221.......",
+    "...........11.........",
+  ];
+  const scale = 4;
+  const offsetX = 0;
+  const offsetY = 8;
 
-function clamp(value, min, max) {
-  return Math.min(max, Math.max(min, value));
-}
+  for (let y = 0; y < pixels.length; y += 1) {
+    for (let x = 0; x < pixels[y].length; x += 1) {
+      const cell = pixels[y][x];
+      if (cell === ".") {
+        continue;
+      }
+      catchSpriteCtx.fillStyle = cell === "1" ? "#d9f0fa" : `#${fish.color.toString(16).padStart(6, "0")}`;
+      catchSpriteCtx.fillRect(offsetX + x * scale, offsetY + y * scale, scale, scale);
+    }
+  }
 
-function easeOutCubic(t) {
-  return 1 - Math.pow(1 - t, 3);
+  catchSpriteCtx.fillStyle = "#466273";
+  catchSpriteCtx.fillRect(66, 23, 4, 4);
 }
 
 function easeInOutQuad(t) {
   return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 }
 
-function getSpeciesScore(species) {
-  const match = fishTable.find((fish) => fish.species === species);
-  return match ? match.score : 1;
-}
-
-function drawSoftFish(bodyWidth, bodyHeight, color) {
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.ellipse(0, 0, bodyWidth, bodyHeight, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.beginPath();
-  ctx.moveTo(bodyWidth * -0.9, 0);
-  ctx.lineTo(bodyWidth * -1.45, bodyHeight * -0.65);
-  ctx.lineTo(bodyWidth * -1.45, bodyHeight * 0.65);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.fillStyle = "rgba(255,255,255,0.18)";
-  ctx.beginPath();
-  ctx.ellipse(bodyWidth * 0.15, -bodyHeight * 0.18, bodyWidth * 0.56, bodyHeight * 0.34, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = "#496577";
-  ctx.beginPath();
-  ctx.arc(bodyWidth * 0.72, -bodyHeight * 0.08, Math.max(1.8, bodyHeight * 0.12), 0, Math.PI * 2);
-  ctx.fill();
-}
-
-function drawSoftAngler(x, y) {
-  ctx.fillStyle = "#213f52";
-  ctx.beginPath();
-  ctx.ellipse(x, y - 22, 28, 24, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = "#ee7a57";
-  ctx.fillRect(x - 18, y - 6, 36, 28);
-
-  ctx.fillStyle = "#ffca74";
-  ctx.beginPath();
-  ctx.arc(x, y - 46, 16, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = "#4b6656";
-  ctx.beginPath();
-  ctx.ellipse(x, y + 16, 10, 6, 0, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.strokeStyle = "#6a4a2b";
-  ctx.lineWidth = 4;
-  ctx.beginPath();
-  ctx.moveTo(x + 4, y - 18);
-  ctx.lineTo(x + 4, y - 76);
-  ctx.lineTo(x + 34, y - 98);
-  ctx.stroke();
-}
-
-function drawSoftLure(x, y) {
-  ctx.fillStyle = "#fff783";
-  ctx.beginPath();
-  ctx.arc(x, y, 8, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = "#ef8b5f";
-  ctx.beginPath();
-  ctx.arc(x + 3, y - 1, 4, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-canvas.addEventListener("pointerdown", (event) => {
-  if (event.cancelable) {
-    event.preventDefault();
-  }
-  game.pointerDown = true;
-  game.holdBoost = false;
-
-  if (!game.active) {
-    return;
-  }
-
-  const point = pointerToCanvas(event);
-  if (point.y < SHORE_Y - 10) {
-    castLure(point.x, point.y);
-  }
-
-  const holdTimer = setTimeout(() => {
-    if (game.pointerDown && game.active) {
-      game.holdBoost = true;
-      setMessage("Burn it back!");
-    }
-  }, 160);
-
-  const clearHold = () => {
-    clearTimeout(holdTimer);
-    canvas.removeEventListener("pointerup", clearHold);
-    canvas.removeEventListener("pointercancel", clearHold);
-    canvas.removeEventListener("pointerleave", clearHold);
-  };
-
-  canvas.addEventListener("pointerup", clearHold, { once: true });
-  canvas.addEventListener("pointercancel", clearHold, { once: true });
-  canvas.addEventListener("pointerleave", clearHold, { once: true });
+const scene = new BoringtideScene();
+const phaserGame = new Phaser.Game({
+  type: Phaser.AUTO,
+  parent: "game-root",
+  width: GAME_WIDTH,
+  height: GAME_HEIGHT,
+  transparent: true,
+  backgroundColor: "#2f88aa",
+  scale: {
+    mode: Phaser.Scale.RESIZE,
+    autoCenter: Phaser.Scale.CENTER_BOTH,
+    width: "100%",
+    height: "100%",
+  },
+  scene: [scene],
 });
 
-canvas.addEventListener("pointerup", () => {
-  game.pointerDown = false;
-  game.holdBoost = false;
-});
-
-canvas.addEventListener("pointercancel", () => {
-  game.pointerDown = false;
-  game.holdBoost = false;
-});
-
-canvas.addEventListener("contextmenu", (event) => {
-  event.preventDefault();
-});
-
-startButton.addEventListener("click", startGame);
-restartButton.addEventListener("click", startGame);
-
-resetGame();
-requestAnimationFrame(loop);
+startButton.addEventListener("click", () => scene.startSession());
+restartButton.addEventListener("click", () => scene.startSession());

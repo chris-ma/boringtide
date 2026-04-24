@@ -14,10 +14,6 @@
   <body>
     <main class="game-shell">
       <section class="hud">
-        <div class="brand">
-          <p class="eyebrow">For those moments when the fishing is slow...</p>
-          <h1>Boringtide Fishing</h1>
-        </div>
         <div class="hud-strip">
           <div class="stat-card">
             <span class="label">Tide</span>
@@ -39,9 +35,10 @@
       </section>
 
       <section class="playfield-frame">
-        <canvas id="gameCanvas" width="900" height="1400" aria-label="Boringtide Fishing playfield"></canvas>
+        <div id="game-root" aria-label="Boringtide Fishing playfield"></div>
 
         <div id="catch-popup" class="catch-popup hidden" aria-live="polite">
+          <canvas id="catch-sprite" class="catch-sprite" width="88" height="48" aria-hidden="true"></canvas>
           <p id="catch-species">Australian Salmon</p>
           <strong id="catch-weight">2.4 kg</strong>
         </div>
@@ -81,6 +78,7 @@
       </section>
     </main>
 
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.88.2/dist/phaser.min.js"></script>
     <script src="./game.js"></script>
   </body>
 </html>
