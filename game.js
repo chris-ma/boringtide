@@ -1,12 +1,11 @@
 const timerEl = document.getElementById("timer");
-const catchCountEl = document.getElementById("catch-count");
-const bestCatchEl = document.getElementById("best-catch");
-const riskMeterEl = document.getElementById("risk-meter");
+const tideFillEl = document.getElementById("tide-fill");
 const catchPopupEl = document.getElementById("catch-popup");
 const catchSpeciesEl = document.getElementById("catch-species");
 const catchWeightEl = document.getElementById("catch-weight");
 const catchSpriteCanvas = document.getElementById("catch-sprite");
 const catchSpriteCtx = catchSpriteCanvas.getContext("2d");
+const catchCloseButton = document.getElementById("catch-close");
 const messageBannerEl = document.getElementById("message-banner");
 const startOverlayEl = document.getElementById("start-overlay");
 const endOverlayEl = document.getElementById("end-overlay");
@@ -39,11 +38,11 @@ const fishTable = [
   { species: "Cobia", min: 7.0, max: 19.0, color: 0x9fc5da, score: 4 },
 ];
 
+const speciesSpawnWeights = [20, 20, 16, 8, 4, 12, 10, 5, 3, 2];
+
 const dom = {
   timerEl,
-  catchCountEl,
-  bestCatchEl,
-  riskMeterEl,
+  tideFillEl,
   catchPopupEl,
   catchSpeciesEl,
   catchWeightEl,
@@ -55,6 +54,7 @@ const dom = {
   resultCatchCountEl,
   resultBestFishEl,
   resultTotalWeightEl,
+  catchCloseButton,
 };
 
 class BoringtideScene extends Phaser.Scene {
@@ -70,54 +70,312 @@ class BoringtideScene extends Phaser.Scene {
     this.holdBoost = false;
     this.holdStart = 0;
     this.audio = { ready: false, context: null, nodes: null };
+    this.shakaBubble = null;
+    this.shakaHand = null;
+    this.schools = [];
+    this.shark = null;
   }
 
   create() {
     this.cameras.main.setBackgroundColor("#2f88aa");
+    this.createTextures();
     this.createBackground();
     this.createEntities();
     this.createInput();
     this.resetSession();
   }
 
+  createTextures() {
+    this.makeBackgroundTexture();
+    this.makeRockTexture();
+    this.makePlayerTexture();
+    this.makeLureTexture();
+    this.makeFishSilhouetteTexture();
+    fishTable.forEach((species, index) => {
+      this.makeFishTexture(`fish-${index}`, species.color);
+    });
+    this.makeSharkTexture();
+  }
+
+  makeCanvasTexture(key, width, height, drawFn) {
+    const texture = this.textures.createCanvas(key, width, height);
+    const ctx = texture.getContext();
+    ctx.imageSmoothingEnabled = false;
+    drawFn(ctx, width, height);
+    texture.refresh();
+  }
+
+  makeBackgroundTexture() {
+    this.makeCanvasTexture("bg-scene", 180, 280, (ctx, width, height) => {
+      const skyGradient = ctx.createLinearGradient(0, 0, 0, 36);
+      skyGradient.addColorStop(0, "#b4deeb");
+      skyGradient.addColorStop(1, "#9acddd");
+      ctx.fillStyle = skyGradient;
+      ctx.fillRect(0, 0, width, 36);
+      const waterGradient = ctx.createLinearGradient(0, 36, 0, 220);
+      waterGradient.addColorStop(0, "#4aabba");
+      waterGradient.addColorStop(0.35, "#2f8aa4");
+      waterGradient.addColorStop(0.72, "#246d8d");
+      waterGradient.addColorStop(1, "#174e70");
+      ctx.fillStyle = waterGradient;
+      ctx.fillRect(0, 36, width, 184);
+      ctx.fillStyle = "#1e6888";
+      ctx.fillRect(0, 212, width, 10);
+      ctx.fillStyle = "#d7eef6";
+      for (let x = 0; x < width; x += 10) {
+        ctx.fillRect(x, 212 + ((x / 10) % 2), 6, 2);
+      }
+
+      ctx.fillStyle = "#4d5961";
+      const ridge = [
+        [0, 238],
+        [14, 226],
+        [28, 232],
+        [42, 216],
+        [58, 222],
+        [74, 208],
+        [90, 215],
+        [108, 203],
+        [126, 211],
+        [144, 198],
+        [160, 205],
+        [180, 194],
+        [180, 280],
+        [0, 280],
+      ];
+      ctx.beginPath();
+      ctx.moveTo(ridge[0][0], ridge[0][1]);
+      ridge.slice(1).forEach(([x, y]) => ctx.lineTo(x, y));
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = "#69777d";
+      ctx.beginPath();
+      ctx.moveTo(0, 240);
+      ctx.lineTo(18, 228);
+      ctx.lineTo(32, 234);
+      ctx.lineTo(48, 220);
+      ctx.lineTo(66, 226);
+      ctx.lineTo(84, 212);
+      ctx.lineTo(102, 220);
+      ctx.lineTo(122, 206);
+      ctx.lineTo(144, 214);
+      ctx.lineTo(164, 202);
+      ctx.lineTo(180, 196);
+      ctx.lineTo(180, 214);
+      ctx.lineTo(0, 250);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = "#39454b";
+      ctx.fillRect(0, 246, 180, 34);
+      ctx.fillStyle = "#7f8d92";
+      ctx.fillRect(18, 238, 16, 5);
+      ctx.fillRect(60, 228, 14, 5);
+      ctx.fillRect(98, 234, 16, 5);
+      ctx.fillRect(142, 224, 18, 5);
+
+      ctx.fillStyle = "rgba(210, 241, 247, 0.35)";
+      [58, 82, 108, 134, 160].forEach((y) => {
+        ctx.fillRect(0, y, width, 2);
+        ctx.fillRect(0, y + 1, width, 1);
+      });
+
+      ctx.fillStyle = "rgba(255,255,255,0.08)";
+      for (let y = 46; y < 208; y += 14) {
+        for (let x = (y / 2) % 12; x < width; x += 18) {
+          ctx.fillRect(x, y, 8, 1);
+          ctx.fillRect(x + 3, y + 1, 5, 1);
+        }
+      }
+
+      ctx.fillStyle = "#d5eef5";
+      ctx.fillRect(8, 12, 18, 4);
+      ctx.fillRect(12, 8, 10, 4);
+      ctx.fillRect(94, 16, 20, 4);
+      ctx.fillRect(100, 12, 10, 4);
+    });
+  }
+
+  makeRockTexture() {
+    this.makeCanvasTexture("rock-ledge", 40, 24, (ctx) => {
+      ctx.fillStyle = "#455159";
+      ctx.beginPath();
+      ctx.moveTo(0, 24);
+      ctx.lineTo(0, 12);
+      ctx.lineTo(5, 8);
+      ctx.lineTo(10, 11);
+      ctx.lineTo(15, 5);
+      ctx.lineTo(20, 9);
+      ctx.lineTo(25, 2);
+      ctx.lineTo(31, 8);
+      ctx.lineTo(36, 3);
+      ctx.lineTo(40, 6);
+      ctx.lineTo(40, 24);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = "#6b787d";
+      ctx.fillRect(4, 11, 8, 3);
+      ctx.fillRect(16, 6, 10, 3);
+      ctx.fillRect(28, 4, 8, 3);
+      ctx.fillStyle = "#2c363c";
+      ctx.fillRect(0, 18, 40, 6);
+    });
+  }
+
+  makePlayerTexture() {
+    this.makeCanvasTexture("angler", 20, 28, (ctx) => {
+      ctx.fillStyle = "#1f3e54";
+      ctx.fillRect(7, 11, 6, 6);
+      ctx.fillRect(6, 16, 8, 4);
+      ctx.fillStyle = "#e57651";
+      ctx.fillRect(6, 17, 8, 6);
+      ctx.fillStyle = "#f5c46f";
+      ctx.fillRect(8, 7, 4, 4);
+      ctx.fillStyle = "#6b4a2b";
+      ctx.fillRect(12, 11, 1, 10);
+      ctx.fillRect(13, 8, 1, 4);
+      ctx.fillRect(14, 6, 2, 1);
+      ctx.fillStyle = "#4a6854";
+      ctx.fillRect(9, 23, 2, 1);
+    });
+  }
+
+  makeLureTexture() {
+    this.makeCanvasTexture("lure", 8, 8, (ctx) => {
+      ctx.fillStyle = "#fff783";
+      ctx.fillRect(1, 1, 4, 4);
+      ctx.fillStyle = "#ef8b5f";
+      ctx.fillRect(4, 2, 2, 2);
+      ctx.fillRect(2, 5, 2, 1);
+    });
+  }
+
+  makeFishTexture(key, color) {
+    this.makeCanvasTexture(key, 24, 12, (ctx) => {
+      const hex = `#${color.toString(16).padStart(6, "0")}`;
+      ctx.fillStyle = hex;
+      ctx.fillRect(6, 3, 10, 5);
+      ctx.fillRect(4, 4, 2, 3);
+      ctx.fillRect(16, 4, 2, 3);
+      ctx.fillRect(2, 5, 2, 1);
+      ctx.fillRect(0, 4, 2, 3);
+      ctx.fillRect(18, 4, 2, 3);
+      ctx.fillStyle = "#dbf0f7";
+      ctx.fillRect(8, 2, 5, 1);
+      ctx.fillStyle = "#486372";
+      ctx.fillRect(14, 4, 1, 1);
+    });
+  }
+
+  makeFishSilhouetteTexture() {
+    this.makeCanvasTexture("fish-shadow", 24, 12, (ctx) => {
+      ctx.fillStyle = "#547785";
+      ctx.fillRect(6, 3, 10, 5);
+      ctx.fillRect(4, 4, 2, 3);
+      ctx.fillRect(16, 4, 2, 3);
+      ctx.fillRect(2, 5, 2, 1);
+      ctx.fillRect(0, 4, 2, 3);
+      ctx.fillRect(18, 4, 2, 3);
+      ctx.fillStyle = "#486774";
+      ctx.fillRect(8, 2, 5, 1);
+      ctx.fillRect(14, 4, 1, 1);
+    });
+  }
+
+  makeSharkTexture() {
+    this.makeCanvasTexture("shark", 36, 16, (ctx) => {
+      ctx.fillStyle = "#5e7681";
+      ctx.fillRect(8, 6, 16, 5);
+      ctx.fillRect(4, 7, 4, 3);
+      ctx.fillRect(24, 7, 4, 3);
+      ctx.fillRect(2, 7, 2, 2);
+      ctx.fillRect(0, 6, 2, 4);
+      ctx.fillRect(28, 5, 4, 6);
+      ctx.fillRect(14, 3, 5, 3);
+      ctx.fillStyle = "#76909a";
+      ctx.fillRect(9, 6, 10, 1);
+      ctx.fillRect(20, 8, 2, 1);
+      ctx.fillStyle = "#3a4b53";
+      ctx.fillRect(22, 7, 1, 1);
+    });
+
+    this.makeCanvasTexture("shark-fin", 12, 12, (ctx) => {
+      ctx.fillStyle = "#42555f";
+      ctx.fillRect(5, 1, 1, 1);
+      ctx.fillRect(4, 2, 2, 1);
+      ctx.fillRect(4, 3, 3, 1);
+      ctx.fillRect(3, 4, 4, 1);
+      ctx.fillRect(3, 5, 5, 1);
+      ctx.fillRect(2, 6, 5, 1);
+      ctx.fillRect(2, 7, 4, 1);
+      ctx.fillRect(1, 8, 4, 1);
+      ctx.fillRect(1, 9, 3, 1);
+      ctx.fillStyle = "#708892";
+      ctx.fillRect(4, 3, 1, 3);
+    });
+  }
+
   createBackground() {
-    this.skyGraphics = this.add.graphics();
-    this.waterBands = this.add.graphics();
-    this.shoreGraphics = this.add.graphics();
-    this.drawBackground();
+    this.background = this.add.image(0, 0, "bg-scene").setOrigin(0, 0);
+    this.background.setScale(GAME_WIDTH / 180, GAME_HEIGHT / 280);
+    this.waterOverlay = this.add.graphics();
+    this.waterOverlay.setDepth(3);
+    this.drawWaterOverlay();
   }
 
   createEntities() {
-    this.player = this.add.container(GAME_WIDTH * 0.5, SHORE_Y - 4);
-    const playerBody = this.add.graphics();
-    playerBody.fillStyle(0x213f52, 1);
-    playerBody.fillEllipse(0, -22, 56, 48);
-    playerBody.fillStyle(0xee7a57, 1);
-    playerBody.fillRect(-18, -6, 36, 28);
-    playerBody.fillStyle(0xffca74, 1);
-    playerBody.fillCircle(0, -46, 16);
-    playerBody.fillStyle(0x4b6656, 1);
-    playerBody.fillEllipse(0, 16, 20, 12);
-    playerBody.lineStyle(4, 0x6a4a2b, 1);
-    playerBody.beginPath();
-    playerBody.moveTo(4, -18);
-    playerBody.lineTo(4, -76);
-    playerBody.lineTo(34, -98);
-    playerBody.strokePath();
-    this.player.add(playerBody);
+    this.rockLedge = this.add.image(GAME_WIDTH * 0.5, SHORE_Y - 14, "rock-ledge");
+    this.rockLedge.setScale(12.5, 5.2);
+    this.rockLedge.setOrigin(0.5, 0.5);
+    this.rockLedge.setDepth(4);
+
+    this.player = this.add.image(GAME_WIDTH * 0.46, SHORE_Y - 118, "angler");
+    this.player.setScale(4);
+    this.player.setOrigin(0.5, 0.5);
+    this.player.setDepth(5);
+
+    this.shakaBubble = this.add.text(this.player.x, this.player.y - 82, "YEW!", {
+      fontFamily: '"Press Start 2P", monospace',
+      fontSize: "18px",
+      color: "#fff0be",
+      stroke: "#173247",
+      strokeThickness: 4,
+    });
+    this.shakaBubble.setOrigin(0.5);
+    this.shakaBubble.setDepth(8);
+    this.shakaBubble.setVisible(false);
+
+    this.shakaHand = this.add.graphics();
+    this.shakaHand.setDepth(8);
 
     this.lineGraphics = this.add.graphics();
 
-    this.lure = this.add.container(this.player.x, this.player.y - 42);
-    this.lureBall = this.add.graphics();
-    this.lureBall.fillStyle(0xfff783, 1);
-    this.lureBall.fillCircle(0, 0, 8);
-    this.lureBall.fillStyle(0xef8b5f, 1);
-    this.lureBall.fillCircle(3, -1, 4);
-    this.lure.add(this.lureBall);
+    this.lure = this.add.image(this.player.x - 6, this.player.y - 24, "lure");
+    this.lure.setScale(3);
+    this.lure.setDepth(6);
     this.lureState = "idle";
-    this.lureTarget = new Phaser.Math.Vector2(this.player.x, this.player.y - 42);
+    this.lureTarget = new Phaser.Math.Vector2(this.player.x, this.player.y - 24);
     this.lureVelocity = new Phaser.Math.Vector2();
+
+    this.shark = this.add.image(GAME_WIDTH * 0.2, WATERLINE_Y + 120, "shark");
+    this.shark.setScale(4);
+    this.shark.setDepth(1);
+    this.shark.setAlpha(0.42);
+    this.shark.setTint(0x6a8792);
+
+    this.sharkFin = this.add.image(this.shark.x, this.shark.y - 78, "shark-fin");
+    this.sharkFin.setScale(3.5);
+    this.sharkFin.setDepth(3.4);
+    this.sharkFin.setAlpha(0.9);
+
+    this.sharkWake = this.add.graphics();
+    this.sharkWake.setDepth(3.35);
+
+    this.sharkDirection = 1;
+    this.sharkSpeed = 58;
+    this.sharkTurnTimer = 0.8;
   }
 
   createInput() {
@@ -130,7 +388,7 @@ class BoringtideScene extends Phaser.Scene {
       this.holdBoost = false;
       this.holdStart = performance.now();
 
-      const worldPoint = this.scalePointer(pointer);
+      const worldPoint = new Phaser.Math.Vector2(pointer.x, pointer.y);
       if (this.lureState === "hooked") {
         this.setMessage("Fish on!");
         return;
@@ -173,9 +431,10 @@ class BoringtideScene extends Phaser.Scene {
       sharkChance: 0.05,
     };
     this.hookedFight = null;
+    this.hideShaka();
     this.lureState = "idle";
-    this.lure.setPosition(this.player.x, this.player.y - 42);
-    this.lureTarget.set(this.player.x, this.player.y - 42);
+    this.lure.setPosition(this.player.x, this.player.y - 24);
+    this.lureTarget.set(this.player.x, this.player.y - 24);
     this.lureVelocity.set(0, 0);
     this.clearFish();
     this.spawnFish();
@@ -196,57 +455,66 @@ class BoringtideScene extends Phaser.Scene {
   }
 
   spawnFish() {
+    this.schools = [];
+    const schoolCount = 5;
+    for (let i = 0; i < schoolCount; i += 1) {
+      const heading = Phaser.Math.FloatBetween(-Math.PI, Math.PI);
+      this.schools.push({
+        x: Phaser.Math.Between(90, GAME_WIDTH - 90),
+        y: Phaser.Math.Between(WATERLINE_Y + 70, SHORE_Y - 220),
+        heading,
+        targetHeading: heading,
+        speed: Phaser.Math.Between(24, 68),
+        turnTimer: Phaser.Math.FloatBetween(0.8, 2.2),
+        spread: Phaser.Math.Between(45, 110),
+      });
+    }
+
     for (let i = 0; i < 18; i += 1) {
-      const speciesIndex = Phaser.Math.Between(0, fishTable.length - 1);
+      const speciesIndex = pickWeightedIndex(speciesSpawnWeights);
       const species = fishTable[speciesIndex];
       const scale = Phaser.Math.FloatBetween(0.82, 1.35);
+      const schoolIndex = Phaser.Math.Between(0, this.schools.length - 1);
+      const school = this.schools[schoolIndex];
       const fish = {
         speciesIndex,
+        schoolIndex,
         dir: Math.random() > 0.5 ? 1 : -1,
-        speed: Phaser.Math.Between(36, 110),
+        spriteScale: scale * 2.2,
+        speed: Phaser.Math.Between(24, 82),
         interest: Phaser.Math.FloatBetween(0.3, 0.95),
         size: Phaser.Math.FloatBetween(18, 34) * scale,
         depth: Math.random(),
         wiggle: Math.random() * Math.PI * 2,
+        offsetX: Phaser.Math.Between(-school.spread, school.spread),
+        offsetY: Phaser.Math.Between(-24, 24),
+        offsetDrift: Phaser.Math.FloatBetween(-0.8, 0.8),
         hooked: false,
-        container: this.makeFishSprite(species.color, scale),
+        container: this.makeFishSprite(speciesIndex, scale),
       };
       fish.container.setPosition(
-        Phaser.Math.Between(40, GAME_WIDTH - 40),
-        Phaser.Math.Between(WATERLINE_Y + 60, SHORE_Y - 150)
+        school.x + fish.offsetX,
+        school.y + fish.offsetY
       );
-      fish.container.setScale(fish.dir, 1);
-      fish.container.alpha = 0.92;
+      fish.container.setFlipX(school.heading < 0 || Math.abs(school.heading) > Math.PI / 2);
+      fish.container.alpha = 0.26 + fish.depth * 0.14;
+      fish.container.setTint(0x7aa0af);
+      fish.container.setDepth(1);
       this.fish.push(fish);
     }
   }
 
-  makeFishSprite(color, scale) {
-    const container = this.add.container(0, 0);
-    const g = this.add.graphics();
-    g.fillStyle(color, 1);
-    g.fillEllipse(0, 0, 48 * scale, 20 * scale);
-    g.beginPath();
-    g.moveTo(-20 * scale, 0);
-    g.lineTo(-36 * scale, -10 * scale);
-    g.lineTo(-36 * scale, 10 * scale);
-    g.closePath();
-    g.fillPath();
-    g.fillStyle(0x496577, 1);
-    g.fillCircle(13 * scale, -1 * scale, Math.max(2, 2.6 * scale));
-    container.add(g);
-    return container;
-  }
-
-  scalePointer(pointer) {
-    const x = (pointer.x / this.scale.width) * GAME_WIDTH;
-    const y = (pointer.y / this.scale.height) * GAME_HEIGHT;
-    return new Phaser.Math.Vector2(x, y);
+  makeFishSprite(speciesIndex, scale) {
+    const sprite = this.add.image(0, 0, "fish-shadow");
+    sprite.setScale(scale * 2.2);
+    sprite.setOrigin(0.5, 0.5);
+    return sprite;
   }
 
   castLure(x, y) {
+    this.playCastSwish();
     this.lureState = "casting";
-    this.castStart = new Phaser.Math.Vector2(this.player.x, this.player.y - 42);
+    this.castStart = new Phaser.Math.Vector2(this.player.x, this.player.y - 24);
     this.castTarget = new Phaser.Math.Vector2(
       Phaser.Math.Clamp(x, 60, GAME_WIDTH - 60),
       Phaser.Math.Clamp(y, WATERLINE_Y + 30, SHORE_Y - 120)
@@ -285,6 +553,7 @@ class BoringtideScene extends Phaser.Scene {
 
   update(_, deltaMs) {
     const dt = Math.min(0.033, deltaMs / 1000);
+    this.drawWaterOverlay(deltaMs * 0.001);
     if (this.pointerHeld && performance.now() - this.holdStart > 160) {
       this.holdBoost = true;
     }
@@ -304,25 +573,58 @@ class BoringtideScene extends Phaser.Scene {
     }
 
     this.updateFish(dt);
+    this.updateShark(dt);
     this.updateLure(dt);
     this.updateHud();
     this.drawLine();
   }
 
   updateFish(dt) {
+    for (const school of this.schools) {
+      school.turnTimer -= dt;
+      if (school.turnTimer <= 0) {
+        school.turnTimer = Phaser.Math.FloatBetween(0.9, 2.4);
+        school.targetHeading += Phaser.Math.FloatBetween(-1.4, 1.4);
+        school.speed = Phaser.Math.Between(24, 68);
+      }
+      school.heading = Phaser.Math.Angle.RotateTo(school.heading, school.targetHeading, dt * 0.9);
+      school.x += Math.cos(school.heading) * school.speed * dt;
+      school.y += Math.sin(school.heading) * school.speed * dt;
+
+      const lowerBoundary = this.getSwimBoundaryY(school.x) - 110;
+      if (school.x < 60) {
+        school.x = 60;
+        school.targetHeading = Phaser.Math.FloatBetween(-1.05, 1.05);
+      } else if (school.x > GAME_WIDTH - 60) {
+        school.x = GAME_WIDTH - 60;
+        school.targetHeading = Math.PI + Phaser.Math.FloatBetween(-1.05, 1.05);
+      }
+      if (school.y < WATERLINE_Y + 72) {
+        school.y = WATERLINE_Y + 72;
+        school.targetHeading = Phaser.Math.FloatBetween(0.2, 1.2);
+      } else if (school.y > lowerBoundary) {
+        school.y = lowerBoundary;
+        school.targetHeading = -Phaser.Math.FloatBetween(0.2, 1.2);
+      }
+    }
+
     for (const fish of this.fish) {
       if (fish.hooked) {
         continue;
       }
       fish.wiggle += dt * (1.8 + fish.depth);
-      fish.container.x += fish.dir * fish.speed * dt;
-      fish.container.y += Math.sin(fish.wiggle) * 10 * dt;
+      const school = this.schools[fish.schoolIndex];
+      fish.offsetX += Math.cos(fish.wiggle * 0.8) * fish.offsetDrift * dt * 12;
+      fish.offsetY += Math.sin(fish.wiggle * 0.7) * fish.offsetDrift * dt * 6;
+      fish.offsetX = Phaser.Math.Clamp(fish.offsetX, -school.spread, school.spread);
+      fish.offsetY = Phaser.Math.Clamp(fish.offsetY, -36, 36);
 
-      if (fish.container.x < -60) {
-        fish.container.x = GAME_WIDTH + 60;
-      } else if (fish.container.x > GAME_WIDTH + 60) {
-        fish.container.x = -60;
-      }
+      const targetX = school.x + fish.offsetX + Math.cos(fish.wiggle * 1.6) * 10;
+      const targetY = school.y + fish.offsetY + Math.sin(fish.wiggle) * 6;
+      fish.container.x = Phaser.Math.Linear(fish.container.x, targetX, dt * (1.3 + fish.depth));
+      fish.container.y = Phaser.Math.Linear(fish.container.y, targetY, dt * (1.15 + fish.depth));
+      fish.dir = Math.cos(school.heading) >= 0 ? 1 : -1;
+      fish.container.setFlipX(fish.dir < 0);
 
       const dx = this.lure.x - fish.container.x;
       const dy = this.lure.y - fish.container.y;
@@ -332,10 +634,55 @@ class BoringtideScene extends Phaser.Scene {
         fish.container.y += (dy / (distance || 1)) * fish.interest * 18 * dt;
       }
 
+      const shorelineLimitY = this.getSwimBoundaryY(fish.container.x);
+      if (fish.container.y > shorelineLimitY) {
+        fish.container.y = shorelineLimitY;
+      }
+      fish.container.x = Phaser.Math.Clamp(fish.container.x, 22, GAME_WIDTH - 22);
+      fish.container.y = Phaser.Math.Clamp(fish.container.y, WATERLINE_Y + 24, shorelineLimitY);
+
+      fish.container.alpha = 0.2 + fish.depth * 0.16;
+
       if (this.lureState === "retrieving") {
         this.tryHookFish(fish, dt, distance);
       }
     }
+  }
+
+  updateShark(dt) {
+    this.sharkTurnTimer -= dt;
+    if (this.sharkTurnTimer <= 0) {
+      this.sharkTurnTimer = Phaser.Math.FloatBetween(1.2, 2.4);
+      this.sharkDirection = Math.random() > 0.5 ? 1 : -1;
+      this.sharkSpeed = Phaser.Math.Between(48, 72);
+      this.shark.y += Phaser.Math.Between(-26, 26);
+    }
+
+    this.shark.x += this.sharkDirection * this.sharkSpeed * dt;
+    this.shark.y += Math.sin(performance.now() * 0.001 + this.shark.x * 0.01) * 10 * dt;
+    if (this.shark.x < 70) {
+      this.shark.x = 70;
+      this.sharkDirection = 1;
+    } else if (this.shark.x > GAME_WIDTH - 70) {
+      this.shark.x = GAME_WIDTH - 70;
+      this.sharkDirection = -1;
+    }
+
+    const sharkLimitY = this.getSwimBoundaryY(this.shark.x) - 26;
+    this.shark.y = Phaser.Math.Clamp(this.shark.y, WATERLINE_Y + 42, sharkLimitY);
+    this.shark.setFlipX(this.sharkDirection < 0);
+
+    const finSurfaceY = Math.max(WATERLINE_Y + 18, this.shark.y - 72);
+    this.sharkFin.setPosition(this.shark.x + this.sharkDirection * 6, finSurfaceY);
+    this.sharkFin.setFlipX(this.sharkDirection < 0);
+
+    this.sharkWake.clear();
+    this.sharkWake.lineStyle(2, 0xd3eef5, 0.42);
+    this.sharkWake.beginPath();
+    this.sharkWake.moveTo(this.sharkFin.x - this.sharkDirection * 28, finSurfaceY + 8);
+    this.sharkWake.lineTo(this.sharkFin.x - this.sharkDirection * 8, finSurfaceY + 5);
+    this.sharkWake.lineTo(this.sharkFin.x + this.sharkDirection * 16, finSurfaceY + 8);
+    this.sharkWake.strokePath();
   }
 
   updateLure(dt) {
@@ -353,7 +700,7 @@ class BoringtideScene extends Phaser.Scene {
     }
 
     if (this.lureState === "retrieving") {
-      const target = new Phaser.Math.Vector2(this.player.x, this.player.y - 42);
+      const target = new Phaser.Math.Vector2(this.player.x, this.player.y - 24);
       const speed = (this.holdBoost ? 1.4 : 1) * 165;
       const toTarget = target.clone().subtract(new Phaser.Math.Vector2(this.lure.x, this.lure.y));
       if (toTarget.length() < 16) {
@@ -362,9 +709,16 @@ class BoringtideScene extends Phaser.Scene {
         this.setMessage("Tap the water to cast");
       } else {
         toTarget.normalize().scale(speed * dt);
-        this.lure.x += toTarget.x + this.lureVelocity.x * dt;
-        this.lure.y += toTarget.y + this.lureVelocity.y * dt;
-        this.lureVelocity.scale(0.88);
+        const stickbaitPhase = performance.now() * 0.018;
+        const stickbaitAmp = this.holdBoost ? 20 : 13;
+        const length = toTarget.length() || 1;
+        const sideX = -toTarget.y / length;
+        const sideY = toTarget.x / length;
+        const zig = Math.sin(stickbaitPhase + this.lure.y * 0.02) * stickbaitAmp;
+        const pop = Math.sin(stickbaitPhase * 0.5) * 3;
+        this.lure.x += toTarget.x + sideX * zig * dt + this.lureVelocity.x * dt;
+        this.lure.y += toTarget.y + sideY * zig * dt - Math.abs(pop) * dt + this.lureVelocity.y * dt;
+        this.lureVelocity.scale(0.8);
       }
       if (Math.random() < 0.14) {
         this.addRipple(this.lure.x, this.lure.y + 8, Phaser.Math.FloatBetween(5, 9));
@@ -377,7 +731,7 @@ class BoringtideScene extends Phaser.Scene {
       return;
     }
 
-    this.lure.setPosition(this.player.x, this.player.y - 42);
+    this.lure.setPosition(this.player.x, this.player.y - 24);
   }
 
   tryHookFish(fish, dt, distance) {
@@ -391,7 +745,9 @@ class BoringtideScene extends Phaser.Scene {
       return;
     }
 
-    if (Math.random() < this.stats.sharkChance) {
+    const sharkDistance = Phaser.Math.Distance.Between(this.lure.x, this.lure.y, this.shark.x, this.shark.y);
+    const sharkThreat = sharkDistance < 120 ? 0.75 : sharkDistance < 180 ? 0.28 : this.stats.sharkChance;
+    if (Math.random() < sharkThreat) {
       this.addBurst(this.lure.x, this.lure.y, 36, 0xff7b5d);
       this.lureState = "idle";
       this.endSession("shark");
@@ -399,13 +755,13 @@ class BoringtideScene extends Phaser.Scene {
     }
 
     const speciesData = fishTable[fish.speciesIndex];
-    const weight = speciesData.min + Math.random() * (speciesData.max - speciesData.min);
+    const weight = rollFishWeight(speciesData);
     this.beginFight(fish, speciesData, weight);
   }
 
   beginFight(fish, speciesData, weight) {
     fish.hooked = true;
-    const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y - 42, fish.container.x, fish.container.y);
+    const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y - 24, fish.container.x, fish.container.y);
     this.hookedFight = {
       fish,
       species: speciesData.species,
@@ -427,6 +783,7 @@ class BoringtideScene extends Phaser.Scene {
     this.addBurst(this.lure.x, this.lure.y, 12, speciesData.color);
     this.addSplash(this.lure.x, this.lure.y, 24, speciesData.color);
     this.startReelScream(weight);
+    this.showShaka();
     this.setMessage(`${speciesData.species} hooked`);
   }
 
@@ -471,7 +828,7 @@ class BoringtideScene extends Phaser.Scene {
     const t = easeInOutQuad(fight.reelElapsed / fight.reelDuration);
     const sway = Math.max(12, 28 - fight.weight * 0.28);
     this.lure.x = Phaser.Math.Linear(this.lure.x, this.player.x, dt * (0.42 + boost * 0.22));
-    this.lure.y = Phaser.Math.Linear(this.lure.y, this.player.y - 42, dt * (0.36 + boost * 0.18));
+    this.lure.y = Phaser.Math.Linear(this.lure.y, this.player.y - 24, dt * (0.36 + boost * 0.18));
     this.lure.x += Math.sin(fight.sway) * sway * (1 - t);
     this.lure.y += Math.cos(fight.sway * 0.7) * sway * 0.55 * (1 - t);
     fight.fish.container.setPosition(this.lure.x, this.lure.y);
@@ -494,6 +851,7 @@ class BoringtideScene extends Phaser.Scene {
     }
 
     this.stopReelScream();
+    this.hideShaka();
     this.stats.catches += 1;
     this.stats.totalWeight += fight.weight;
     this.stats.sharkChance = Math.min(0.42, this.stats.sharkChance + 0.012 + fight.score * 0.003);
@@ -503,16 +861,22 @@ class BoringtideScene extends Phaser.Scene {
     }
 
     fight.fish.hooked = false;
-    fight.fish.speciesIndex = Phaser.Math.Between(0, fishTable.length - 1);
+    fight.fish.speciesIndex = pickWeightedIndex(speciesSpawnWeights);
+    fight.fish.container.setTexture("fish-shadow");
+    fight.fish.container.setScale(fight.fish.spriteScale);
     fight.fish.container.setPosition(-80, Phaser.Math.Between(WATERLINE_Y + 80, SHORE_Y - 180));
     fight.fish.dir *= -1;
-    fight.fish.container.setScale(fight.fish.dir, 1);
+    fight.fish.container.setFlipX(fight.fish.dir < 0);
+    fight.fish.container.setTint(0x7aa0af);
+    fight.fish.schoolIndex = Phaser.Math.Between(0, this.schools.length - 1);
+    fight.fish.offsetX = Phaser.Math.Between(-this.schools[fight.fish.schoolIndex].spread, this.schools[fight.fish.schoolIndex].spread);
+    fight.fish.offsetY = Phaser.Math.Between(-24, 24);
 
     this.showCatchPopup(fight.species, fight.weight);
     this.addBurst(this.lure.x, this.lure.y, 18, fight.color);
     this.hookedFight = null;
     this.lureState = "idle";
-    this.lure.setPosition(this.player.x, this.player.y - 42);
+    this.lure.setPosition(this.player.x, this.player.y - 24);
     this.updateHud();
     this.setMessage(`${fight.species} landed`);
   }
@@ -521,6 +885,7 @@ class BoringtideScene extends Phaser.Scene {
     const ripple = this.add.circle(x, y, radius, 0xffffff, 0);
     ripple.setStrokeStyle(2, 0xdcf5ff, 0.5);
     ripple.life = 0.8;
+    ripple.setDepth(7);
     this.splashes.push(ripple);
   }
 
@@ -531,6 +896,7 @@ class BoringtideScene extends Phaser.Scene {
       drop.vy = Math.sin(-Math.PI / 2 + (Math.random() - 0.5) * 1.8) * Phaser.Math.Between(30, 130);
       drop.life = Phaser.Math.FloatBetween(0.35, 0.8);
       drop.isDrop = true;
+      drop.setDepth(7);
       this.splashes.push(drop);
     }
   }
@@ -563,31 +929,32 @@ class BoringtideScene extends Phaser.Scene {
 
   drawLine() {
     this.lineGraphics.clear();
+    this.lineGraphics.setDepth(6);
     this.lineGraphics.lineStyle(2, 0xfff6d6, 1);
     this.lineGraphics.beginPath();
-    this.lineGraphics.moveTo(this.player.x, this.player.y - 42);
+    this.lineGraphics.moveTo(this.player.x, this.player.y - 24);
     this.lineGraphics.lineTo(this.lure.x, this.lure.y);
     this.lineGraphics.strokePath();
   }
 
-  drawBackground() {
-    this.skyGraphics.clear();
-    this.waterBands.clear();
-    this.shoreGraphics.clear();
+  drawWaterOverlay(time = 0) {
+    this.waterOverlay.clear();
+    this.waterOverlay.fillStyle(0x6eb6c9, 0.08);
+    this.waterOverlay.fillRect(0, WATERLINE_Y + 10, GAME_WIDTH, SHORE_Y - WATERLINE_Y - 18);
 
-    this.skyGraphics.fillStyle(0xa4d6e6, 1);
-    this.skyGraphics.fillRect(0, 0, GAME_WIDTH, WATERLINE_Y);
-
-    this.waterBands.fillGradientStyle(0x3ea7c0, 0x3ea7c0, 0x1b5a7d, 0x1b5a7d, 1);
-    this.waterBands.fillRect(0, WATERLINE_Y, GAME_WIDTH, SHORE_Y - WATERLINE_Y);
+    this.waterOverlay.fillStyle(0x9ed6e4, 0.08);
     for (let i = 0; i < 5; i += 1) {
-      const y = WATERLINE_Y + 8 + i * ((SHORE_Y - WATERLINE_Y) / 5);
-      this.waterBands.fillStyle(0xb9e5f2, 0.38);
-      this.waterBands.fillRect(0, y, GAME_WIDTH, 4);
+      const y = WATERLINE_Y + 34 + i * 92;
+      const offset = Math.sin(time * 0.9 + i) * 22;
+      this.waterOverlay.fillRect(0, y, GAME_WIDTH, 2);
+      for (let x = -40; x < GAME_WIDTH + 40; x += 64) {
+        this.waterOverlay.fillRect(x + offset, y - 6, 18, 1);
+        this.waterOverlay.fillRect(x + 20 + offset, y - 3, 12, 1);
+      }
     }
 
-    this.shoreGraphics.fillStyle(0xf5cf7d, 1);
-    this.shoreGraphics.fillRect(0, SHORE_Y, GAME_WIDTH, GAME_HEIGHT - SHORE_Y);
+    this.waterOverlay.fillGradientStyle(0x7bc1d3, 0x7bc1d3, 0x1d5f80, 0x1d5f80, 0.1);
+    this.waterOverlay.fillRect(0, WATERLINE_Y + 20, GAME_WIDTH, SHORE_Y - WATERLINE_Y - 20);
   }
 
   showCatchPopup(species, weight) {
@@ -613,13 +980,70 @@ class BoringtideScene extends Phaser.Scene {
       .toString()
       .padStart(2, "0");
     timerEl.textContent = `${minutes}:${seconds}`;
-    catchCountEl.textContent = String(this.stats.catches);
-    bestCatchEl.textContent = this.stats.bestFish
-      ? `${this.stats.bestFish.species.split(" ")[0]} ${this.stats.bestFish.weight.toFixed(1)}kg`
-      : "None";
+    tideFillEl.style.transform = `scaleX(${this.timeLeft / SESSION_SECONDS})`;
+  }
 
-    const risk = this.stats.sharkChance;
-    riskMeterEl.textContent = risk < 0.1 ? "Low" : risk < 0.18 ? "Rising" : risk < 0.28 ? "Hot" : "Danger";
+  getSwimBoundaryY(x) {
+    const points = [
+      { x: 0, y: SHORE_Y - 110 },
+      { x: GAME_WIDTH * 0.16, y: SHORE_Y - 150 },
+      { x: GAME_WIDTH * 0.3, y: SHORE_Y - 220 },
+      { x: GAME_WIDTH * 0.46, y: SHORE_Y - 300 },
+      { x: GAME_WIDTH * 0.62, y: SHORE_Y - 240 },
+      { x: GAME_WIDTH * 0.78, y: SHORE_Y - 170 },
+      { x: GAME_WIDTH, y: SHORE_Y - 130 },
+    ];
+
+    if (x <= points[0].x) {
+      return points[0].y;
+    }
+
+    for (let i = 1; i < points.length; i += 1) {
+      const left = points[i - 1];
+      const right = points[i];
+      if (x <= right.x) {
+        const t = (x - left.x) / (right.x - left.x);
+        return Phaser.Math.Linear(left.y, right.y, t);
+      }
+    }
+
+    return points[points.length - 1].y;
+  }
+
+  showShaka() {
+    this.hideShaka();
+    this.shakaBubble.setPosition(this.player.x, this.player.y - 82);
+    this.shakaBubble.setScale(0.8);
+    this.shakaBubble.setAlpha(1);
+    this.shakaBubble.setVisible(true);
+    this.drawShakaHand(this.player.x + 44, this.player.y - 52, 1);
+    this.tweens.add({
+      targets: this.shakaBubble,
+      y: this.player.y - 98,
+      scale: 1,
+      duration: 120,
+      ease: "Quad.out",
+    });
+    this.time.delayedCall(850, () => this.hideShaka());
+  }
+
+  hideShaka() {
+    if (this.shakaBubble) {
+      this.shakaBubble.setVisible(false);
+    }
+    if (this.shakaHand) {
+      this.shakaHand.clear();
+    }
+  }
+
+  drawShakaHand(x, y, scale) {
+    this.shakaHand.clear();
+    this.shakaHand.fillStyle(0xf5c46f, 1);
+    this.shakaHand.fillRect(x, y, 6 * scale, 14 * scale);
+    this.shakaHand.fillRect(x - 4 * scale, y + 10 * scale, 8 * scale, 4 * scale);
+    this.shakaHand.fillRect(x + 4 * scale, y - 4 * scale, 4 * scale, 6 * scale);
+    this.shakaHand.fillRect(x + 5 * scale, y + 2 * scale, 3 * scale, 6 * scale);
+    this.shakaHand.fillRect(x + 6 * scale, y + 7 * scale, 3 * scale, 5 * scale);
   }
 
   ensureAudioReady() {
@@ -695,6 +1119,39 @@ class BoringtideScene extends Phaser.Scene {
     wobble.stop(now + 0.15);
     this.audio.nodes = null;
   }
+
+  playCastSwish() {
+    if (!this.audio.ready || !this.audio.context) {
+      return;
+    }
+
+    const ctxAudio = this.audio.context;
+    const noiseBuffer = ctxAudio.createBuffer(1, ctxAudio.sampleRate * 0.18, ctxAudio.sampleRate);
+    const data = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < data.length; i += 1) {
+      data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+    }
+
+    const source = ctxAudio.createBufferSource();
+    const filter = ctxAudio.createBiquadFilter();
+    const gain = ctxAudio.createGain();
+
+    source.buffer = noiseBuffer;
+    filter.type = "bandpass";
+    filter.frequency.value = 1400;
+    filter.Q.value = 0.9;
+    gain.gain.value = 0.0001;
+
+    source.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctxAudio.destination);
+
+    const now = ctxAudio.currentTime;
+    gain.gain.exponentialRampToValueAtTime(0.05, now + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+    source.start(now);
+    source.stop(now + 0.2);
+  }
 }
 
 function drawCatchSprite(species) {
@@ -733,6 +1190,24 @@ function easeInOutQuad(t) {
   return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
 }
 
+function pickWeightedIndex(weights) {
+  const total = weights.reduce((sum, weight) => sum + weight, 0);
+  let roll = Math.random() * total;
+  for (let i = 0; i < weights.length; i += 1) {
+    roll -= weights[i];
+    if (roll <= 0) {
+      return i;
+    }
+  }
+  return weights.length - 1;
+}
+
+function rollFishWeight(speciesData) {
+  const bias = Math.pow(Math.random(), 1.85);
+  const weight = Phaser.Math.Linear(speciesData.min, speciesData.max, bias);
+  return Number(weight.toFixed(1));
+}
+
 const scene = new BoringtideScene();
 const phaserGame = new Phaser.Game({
   type: Phaser.AUTO,
@@ -742,13 +1217,14 @@ const phaserGame = new Phaser.Game({
   transparent: true,
   backgroundColor: "#2f88aa",
   scale: {
-    mode: Phaser.Scale.RESIZE,
+    mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
-    width: "100%",
-    height: "100%",
+    width: GAME_WIDTH,
+    height: GAME_HEIGHT,
   },
   scene: [scene],
 });
 
 startButton.addEventListener("click", () => scene.startSession());
 restartButton.addEventListener("click", () => scene.startSession());
+catchCloseButton.addEventListener("click", () => scene.hideCatchPopup());
