@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Boringtide Fishing</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="game-shell">
+      <section class="hud">
+        <div class="brand">
+          <p class="eyebrow">For those moments when the fishing is slow...</p>
+          <h1>Boringtide Fishing</h1>
+        </div>
+        <div class="hud-strip">
+          <div class="stat-card">
+            <span class="label">Tide</span>
+            <strong id="timer">2:30</strong>
+          </div>
+          <div class="stat-card">
+            <span class="label">Catch</span>
+            <strong id="catch-count">0</strong>
+          </div>
+          <div class="stat-card">
+            <span class="label">Best</span>
+            <strong id="best-catch">None</strong>
+          </div>
+          <div class="stat-card danger">
+            <span class="label">Shark Risk</span>
+            <strong id="risk-meter">Low</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="playfield-frame">
+        <canvas id="gameCanvas" width="900" height="1400" aria-label="Boringtide Fishing playfield"></canvas>
+
+        <div id="catch-popup" class="catch-popup hidden" aria-live="polite">
+          <p id="catch-species">Australian Salmon</p>
+          <strong id="catch-weight">2.4 kg</strong>
+        </div>
+
+        <div id="message-banner" class="message-banner">Tap the water to cast</div>
+
+        <div id="start-overlay" class="overlay">
+          <div class="panel">
+            <p class="kicker">Arcade Shore Fishing</p>
+            <h2>Wait for the tide... then send it.</h2>
+            <p>
+              Tap anywhere in the water to cast. The lure retrieves automatically. Hook as many pelagics as you can
+              before the tide ends... and hope the shark never eats the lure.
+            </p>
+            <button id="start-button" class="arcade-button">Start Tide</button>
+          </div>
+        </div>
+
+        <div id="end-overlay" class="overlay hidden">
+          <div class="panel panel-end">
+            <p id="end-headline" class="game-over-line">Tide Finished</p>
+            <h2 id="end-subheadline">Solid little session.</h2>
+            <div class="results">
+              <p>Total Catch <strong id="result-catch-count">0</strong></p>
+              <p>Best Fish <strong id="result-best-fish">None</strong></p>
+              <p>Total Weight <strong id="result-total-weight">0.0 kg</strong></p>
+            </div>
+            <button id="restart-button" class="arcade-button">Fish Another Tide</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="controls">
+        <p>Tap water to cast</p>
+        <p>Tap while retrieving to twitch</p>
+        <p>Hold anywhere to burn the lure back faster</p>
+      </section>
+    </main>
+
+    <script src="./game.js"></script>
+  </body>
+</html>
