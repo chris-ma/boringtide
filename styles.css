@@ -27,17 +27,25 @@ body {
   background:
     radial-gradient(circle at top, rgba(255, 248, 196, 0.55), transparent 30%),
     linear-gradient(180deg, var(--bg-top), var(--bg-bottom));
+  overscroll-behavior: none;
 }
 
 body {
   display: flex;
   justify-content: center;
-  padding: 20px 14px 32px;
+  min-height: 100dvh;
+  padding:
+    max(12px, env(safe-area-inset-top))
+    max(10px, env(safe-area-inset-right))
+    max(18px, env(safe-area-inset-bottom))
+    max(10px, env(safe-area-inset-left));
 }
 
 .game-shell {
-  width: min(100%, 520px);
+  width: min(100%, 500px);
+  min-height: calc(100dvh - max(12px, env(safe-area-inset-top)) - max(18px, env(safe-area-inset-bottom)));
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 16px;
 }
 
@@ -104,6 +112,7 @@ body {
 
 .playfield-frame {
   position: relative;
+  min-height: 0;
   border-radius: 30px;
   overflow: hidden;
   box-shadow: 0 20px 50px rgba(16, 33, 48, 0.3);
@@ -113,7 +122,10 @@ body {
 canvas {
   display: block;
   width: 100%;
-  height: auto;
+  height: min(72dvh, 820px);
+  max-height: calc(100dvh - 270px);
+  min-height: 420px;
+  aspect-ratio: 9 / 14;
   touch-action: none;
   background: linear-gradient(180deg, var(--sea-shallow) 0%, var(--sea-mid) 40%, var(--sea-deep) 100%);
 }
@@ -154,6 +166,7 @@ canvas {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   box-shadow: 0 6px 0 #d96a33;
+  touch-action: manipulation;
 }
 
 .arcade-button:active {
@@ -193,6 +206,7 @@ canvas {
 
 .message-banner {
   bottom: 18px;
+  max-width: calc(100% - 28px);
   padding: 10px 16px;
   border-radius: 999px;
   background: rgba(11, 31, 48, 0.82);
@@ -268,6 +282,14 @@ canvas {
     padding-inline: 8px;
   }
 
+  .game-shell {
+    gap: 10px;
+  }
+
+  .hud {
+    padding: 12px;
+  }
+
   .hud-strip,
   .controls {
     grid-template-columns: 1fr 1fr;
@@ -276,5 +298,62 @@ canvas {
 
   .controls {
     gap: 8px;
+    padding: 12px;
+    font-size: 0.68rem;
+  }
+
+  .playfield-frame {
+    border-radius: 24px;
+  }
+
+  canvas {
+    height: min(62dvh, 700px);
+    max-height: calc(100dvh - 225px);
+    min-height: 360px;
+  }
+
+  .catch-popup {
+    top: 16%;
+    min-width: calc(100% - 28px);
+    padding: 14px 12px;
+  }
+
+  .catch-popup strong {
+    font-size: 1.65rem;
+  }
+
+  .panel {
+    padding: 20px 16px;
+  }
+
+  .message-banner {
+    bottom: 12px;
+    font-size: 0.72rem;
+  }
+
+  .results p {
+    font-size: 0.88rem;
+    align-items: center;
+  }
+}
+
+@media (max-height: 760px) {
+  .game-shell {
+    gap: 10px;
+  }
+
+  .hud {
+    padding: 12px;
+  }
+
+  canvas {
+    height: min(56dvh, 620px);
+    max-height: calc(100dvh - 210px);
+    min-height: 320px;
+  }
+
+  .controls {
+    padding: 10px 12px;
+    font-size: 0.66rem;
   }
 }

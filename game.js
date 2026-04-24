@@ -562,6 +562,9 @@ function lerp(a, b, t) {
 }
 
 canvas.addEventListener("pointerdown", (event) => {
+  if (event.cancelable) {
+    event.preventDefault();
+  }
   game.pointerDown = true;
   game.holdBoost = false;
 
@@ -601,6 +604,10 @@ canvas.addEventListener("pointerup", () => {
 canvas.addEventListener("pointercancel", () => {
   game.pointerDown = false;
   game.holdBoost = false;
+});
+
+canvas.addEventListener("contextmenu", (event) => {
+  event.preventDefault();
 });
 
 startButton.addEventListener("click", startGame);
