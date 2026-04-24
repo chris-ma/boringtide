@@ -1,5 +1,6 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
+ctx.imageSmoothingEnabled = true;
 
 const timerEl = document.getElementById("timer");
 const catchCountEl = document.getElementById("catch-count");
@@ -26,16 +27,16 @@ const SHORE_Y = HEIGHT * 0.9;
 const SESSION_SECONDS = 150;
 
 const fishTable = [
-  { species: "Australian Salmon", min: 1.2, max: 4.8, color: "#f9ff96", score: 1 },
-  { species: "Tailor", min: 0.8, max: 2.9, color: "#daf2ff", score: 1 },
-  { species: "Bonito", min: 1.8, max: 5.5, color: "#8ce4ff", score: 2 },
-  { species: "Yellowtail Kingfish", min: 4.5, max: 14.2, color: "#ffe385", score: 3 },
-  { species: "Tuna", min: 6.5, max: 18.5, color: "#b8ecff", score: 4 },
-  { species: "Mackerel", min: 1.4, max: 6.4, color: "#beffce", score: 2 },
-  { species: "Trevally", min: 2.0, max: 8.0, color: "#ffffff", score: 2 },
-  { species: "Queenfish", min: 3.5, max: 10.8, color: "#d3f7ff", score: 3 },
-  { species: "Dolphinfish", min: 5.0, max: 15.0, color: "#78ffd2", score: 4 },
-  { species: "Cobia", min: 7.0, max: 19.0, color: "#d9d7c8", score: 4 },
+  { species: "Australian Salmon", min: 1.2, max: 4.8, color: "#d9d8c8", score: 1 },
+  { species: "Tailor", min: 0.8, max: 2.9, color: "#c6dfeb", score: 1 },
+  { species: "Bonito", min: 1.8, max: 5.5, color: "#d8e6ef", score: 2 },
+  { species: "Yellowtail Kingfish", min: 4.5, max: 14.2, color: "#b9d0b0", score: 3 },
+  { species: "Tuna", min: 6.5, max: 18.5, color: "#8fd2ea", score: 4 },
+  { species: "Mackerel", min: 1.4, max: 6.4, color: "#dcca74", score: 2 },
+  { species: "Trevally", min: 2.0, max: 8.0, color: "#c8d8e1", score: 2 },
+  { species: "Queenfish", min: 3.5, max: 10.8, color: "#a8d8ef", score: 3 },
+  { species: "Dolphinfish", min: 5.0, max: 15.0, color: "#d7e887", score: 4 },
+  { species: "Cobia", min: 7.0, max: 19.0, color: "#9fc5da", score: 4 },
 ];
 
 const game = {
@@ -51,6 +52,7 @@ const game = {
   lastTick: 0,
   messageTimeout: null,
   popupTimeout: null,
+  hookedFish: null,
   player: {
     x: WIDTH * 0.5,
     y: SHORE_Y,
@@ -90,6 +92,7 @@ function resetGame() {
   game.pointerDown = false;
   game.holdBoost = false;
   game.lastTick = 0;
+  game.hookedFish = null;
   game.lure = {
     state: "idle",
     x: WIDTH * 0.5,
@@ -208,6 +211,11 @@ function castLure(x, y) {
     return;
   }
 
+  if (game.lure.state === "hooked") {
+    setMessage("Fish on!");
+    return;
+  }
+
   if (game.lure.state === "retrieving") {
     game.lure.twitchPower = 1;
     setMessage("Twitch!");
@@ -290,31 +298,46 @@ function tryHookFish(dt) {
 
     const speciesData = fishTable[fish.speciesIndex];
     const weight = speciesData.min + Math.random() * (speciesData.max - speciesData.min);
-    game.stats.catches += 1;
-    game.stats.totalWeight += weight;
-    game.stats.streak += 1;
-    game.stats.sharkChance = Math.min(0.42, game.stats.sharkChance + 0.012 + speciesData.score * 0.003);
-
-    if (!game.stats.bestFish || weight > game.stats.bestWeight) {
-      game.stats.bestWeight = weight;
-      game.stats.bestFish = { species: speciesData.species, weight };
-    }
-
-    fish.x = -50;
-    fish.y = WATERLINE_Y + 70 + Math.random() * (HEIGHT * 0.55);
-    fish.speciesIndex = Math.floor(Math.random() * fishTable.length);
-    fish.dir *= -1;
-
-    showCatchPopup(speciesData.species, weight);
-    setMessage(`${speciesData.species} landed`);
-    addBurst(game.lure.x, game.lure.y, 14, speciesData.color);
-    updateHud();
+    beginHookedFight(fish, speciesData, weight);
     return;
   }
 }
 
+function beginHookedFight(fish, speciesData, weight) {
+  const dx = fish.x - game.player.x;
+  const dy = fish.y - (game.player.y - 52);
+  const baseAngle = Math.atan2(dy, dx);
+  const runAngle = baseAngle + (Math.random() > 0.5 ? 1 : -1) * (0.3 + Math.random() * 0.45);
+  const runDistance = Math.min(260, 120 + weight * 9);
+
+  fish.hooked = true;
+  game.lure.state = "hooked";
+  game.hookedFish = {
+    fish,
+    species: speciesData.species,
+    color: speciesData.color,
+    weight,
+    runElapsed: 0,
+    runDuration: 0.45 + weight * 0.055,
+    reelElapsed: 0,
+    reelDuration: 1.4 + weight * 0.14,
+    originX: game.lure.x,
+    originY: game.lure.y,
+    runTargetX: clamp(game.lure.x + Math.cos(runAngle) * runDistance, 50, WIDTH - 50),
+    runTargetY: clamp(game.lure.y + Math.sin(runAngle) * runDistance, WATERLINE_Y + 30, SHORE_Y - 140),
+    sway: Math.random() * Math.PI * 2,
+  };
+
+  addBurst(game.lure.x, game.lure.y, 12, speciesData.color);
+  setMessage(`${speciesData.species} hooked`);
+}
+
 function updateFish(dt) {
   for (const fish of game.fish) {
+    if (fish.hooked) {
+      continue;
+    }
+
     fish.wiggle += dt * (1.8 + fish.depth);
     fish.x += fish.dir * fish.speed * dt;
     fish.y += Math.sin(fish.wiggle) * 10 * dt;
@@ -370,10 +393,86 @@ function updateLure(dt) {
     }
 
     lure.twitchPower = Math.max(0, lure.twitchPower - dt * 2.4);
+  } else if (lure.state === "hooked") {
+    updateHookedFish(dt);
   } else {
     lure.x = game.player.x;
     lure.y = game.player.y - 46;
   }
+}
+
+function updateHookedFish(dt) {
+  const hooked = game.hookedFish;
+  if (!hooked) {
+    game.lure.state = "idle";
+    return;
+  }
+
+  hooked.sway += dt * (3.4 + hooked.weight * 0.08);
+  if (hooked.runElapsed < hooked.runDuration) {
+    hooked.runElapsed = Math.min(hooked.runDuration, hooked.runElapsed + dt);
+    const t = easeOutCubic(hooked.runElapsed / hooked.runDuration);
+    game.lure.x = lerp(hooked.originX, hooked.runTargetX, t);
+    game.lure.y = lerp(hooked.originY, hooked.runTargetY, t);
+    hooked.fish.x = game.lure.x;
+    hooked.fish.y = game.lure.y;
+    if (Math.random() < 0.28) {
+      addRipple(game.lure.x, game.lure.y + 6, 6 + Math.random() * 8);
+    }
+    setMessage(`Fish running... ${hooked.weight.toFixed(1)}kg`);
+    return;
+  }
+
+  const reelBoost = game.holdBoost ? 1.65 : 1;
+  hooked.reelElapsed = Math.min(hooked.reelDuration, hooked.reelElapsed + dt * reelBoost);
+  const t = easeInOutQuad(hooked.reelElapsed / hooked.reelDuration);
+  const targetX = game.player.x;
+  const targetY = game.player.y - 46;
+  const swayAmount = Math.max(8, 20 - hooked.weight * 0.35);
+  game.lure.x = lerp(hooked.runTargetX, targetX, t) + Math.sin(hooked.sway) * swayAmount * (1 - t);
+  game.lure.y = lerp(hooked.runTargetY, targetY, t) + Math.cos(hooked.sway * 0.7) * swayAmount * 0.45 * (1 - t);
+  hooked.fish.x = game.lure.x;
+  hooked.fish.y = game.lure.y;
+  if (Math.random() < 0.18) {
+    addRipple(game.lure.x, game.lure.y + 6, 4 + Math.random() * 6);
+  }
+  setMessage(game.holdBoost ? `Reeling hard... ${hooked.species}` : `Reeling in ${hooked.species}`);
+
+  if (hooked.reelElapsed >= hooked.reelDuration) {
+    landHookedFish();
+  }
+}
+
+function landHookedFish() {
+  const hooked = game.hookedFish;
+  if (!hooked) {
+    return;
+  }
+
+  game.stats.catches += 1;
+  game.stats.totalWeight += hooked.weight;
+  game.stats.streak += 1;
+  game.stats.sharkChance = Math.min(0.42, game.stats.sharkChance + 0.012 + getSpeciesScore(hooked.species) * 0.003);
+
+  if (!game.stats.bestFish || hooked.weight > game.stats.bestWeight) {
+    game.stats.bestWeight = hooked.weight;
+    game.stats.bestFish = { species: hooked.species, weight: hooked.weight };
+  }
+
+  hooked.fish.hooked = false;
+  hooked.fish.x = -50;
+  hooked.fish.y = WATERLINE_Y + 70 + Math.random() * (HEIGHT * 0.55);
+  hooked.fish.speciesIndex = Math.floor(Math.random() * fishTable.length);
+  hooked.fish.dir *= -1;
+
+  showCatchPopup(hooked.species, hooked.weight);
+  setMessage(`${hooked.species} landed`);
+  addBurst(game.lure.x, game.lure.y, 14, hooked.color);
+  game.hookedFish = null;
+  game.lure.state = "idle";
+  game.lure.x = game.player.x;
+  game.lure.y = game.player.y - 46;
+  updateHud();
 }
 
 function updateRipples(dt) {
@@ -409,52 +508,46 @@ function drawBackground() {
   ctx.clearRect(0, 0, WIDTH, HEIGHT);
 
   const sky = ctx.createLinearGradient(0, 0, 0, WATERLINE_Y);
-  sky.addColorStop(0, "#8be7ff");
-  sky.addColorStop(1, "#d8f7ff");
+  sky.addColorStop(0, "#a8dfef");
+  sky.addColorStop(1, "#b8edf7");
   ctx.fillStyle = sky;
   ctx.fillRect(0, 0, WIDTH, WATERLINE_Y);
 
-  ctx.fillStyle = "#f5cc73";
+  ctx.fillStyle = "#3ba2bd";
+  ctx.fillRect(0, WATERLINE_Y, WIDTH, HEIGHT - WATERLINE_Y);
+
+  ctx.fillStyle = "#f5cf7d";
   ctx.fillRect(0, SHORE_Y, WIDTH, HEIGHT - SHORE_Y);
 
-  ctx.fillStyle = "rgba(255,255,255,0.26)";
-  for (let i = 0; i < 5; i += 1) {
-    ctx.fillRect(0, WATERLINE_Y + i * 120, WIDTH, 8);
+  const bands = 6;
+  for (let i = 0; i < bands; i += 1) {
+    const y = WATERLINE_Y + i * ((SHORE_Y - WATERLINE_Y) / bands);
+    const alpha = 0.08 + i * 0.02;
+    ctx.fillStyle = `rgba(255,255,255,${alpha})`;
+    ctx.fillRect(0, y, WIDTH, 4);
   }
 }
 
 function drawFish() {
   for (const fish of game.fish) {
+    if (fish.hooked) {
+      continue;
+    }
     const species = fishTable[fish.speciesIndex];
     ctx.save();
     ctx.translate(fish.x, fish.y);
     ctx.scale(fish.dir, 1);
-    ctx.globalAlpha = 0.5 + fish.depth * 0.5;
-
-    ctx.fillStyle = species.color;
-    ctx.beginPath();
-    ctx.ellipse(0, 0, fish.size * 1.4, fish.size * 0.72, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.beginPath();
-    ctx.moveTo(-fish.size * 1.4, 0);
-    ctx.lineTo(-fish.size * 2.1, -fish.size * 0.65);
-    ctx.lineTo(-fish.size * 2.1, fish.size * 0.65);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.fillStyle = "#112130";
-    ctx.beginPath();
-    ctx.arc(fish.size * 0.8, -2, 2.6, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.globalAlpha = 0.55 + fish.depth * 0.35;
+    drawSoftFish(fish.size * 1.55, fish.size * 0.7, species.color);
     ctx.restore();
   }
+  ctx.globalAlpha = 1;
 }
 
 function drawRipples() {
   for (const ripple of game.ripples) {
-    ctx.strokeStyle = `rgba(255, 255, 255, ${ripple.life * 0.6})`;
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = `rgba(220, 245, 255, ${ripple.life * 0.55})`;
+    ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(ripple.x, ripple.y, ripple.radius, 0, Math.PI * 2);
     ctx.stroke();
@@ -466,7 +559,7 @@ function drawParticles() {
     ctx.fillStyle = particle.color;
     ctx.globalAlpha = Math.max(0, particle.life);
     ctx.beginPath();
-    ctx.arc(particle.x, particle.y, 5, 0, Math.PI * 2);
+    ctx.arc(particle.x, particle.y, 4, 0, Math.PI * 2);
     ctx.fill();
   }
   ctx.globalAlpha = 1;
@@ -476,40 +569,14 @@ function drawPlayerAndLure() {
   const { player, lure } = game;
 
   ctx.strokeStyle = "#fff6d6";
-  ctx.lineWidth = 4;
+  ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(player.x, player.y - 68);
+  ctx.moveTo(player.x, player.y - 42);
   ctx.lineTo(lure.x, lure.y);
   ctx.stroke();
 
-  ctx.strokeStyle = "#472712";
-  ctx.lineWidth = 8;
-  ctx.lineCap = "round";
-  ctx.beginPath();
-  ctx.moveTo(player.x, player.y - 84);
-  ctx.lineTo(player.x + 28, player.y - 10);
-  ctx.stroke();
-
-  ctx.fillStyle = "#173247";
-  ctx.beginPath();
-  ctx.arc(player.x, player.y - 110, 26, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = "#ffcf7d";
-  ctx.beginPath();
-  ctx.arc(player.x, player.y - 146, 18, 0, Math.PI * 2);
-  ctx.fill();
-
-  ctx.fillStyle = "#ff7750";
-  ctx.fillRect(player.x - 26, player.y - 92, 52, 56);
-
-  ctx.fillStyle = "#fff673";
-  ctx.beginPath();
-  ctx.arc(lure.x, lure.y, 10, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = "#ff633d";
-  ctx.lineWidth = 3;
-  ctx.stroke();
+  drawSoftAngler(player.x, player.y);
+  drawSoftLure(lure.x, lure.y);
 }
 
 function drawDangerFlash() {
@@ -559,6 +626,87 @@ function loop(timestamp) {
 
 function lerp(a, b, t) {
   return a + (b - a) * t;
+}
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function easeOutCubic(t) {
+  return 1 - Math.pow(1 - t, 3);
+}
+
+function easeInOutQuad(t) {
+  return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+}
+
+function getSpeciesScore(species) {
+  const match = fishTable.find((fish) => fish.species === species);
+  return match ? match.score : 1;
+}
+
+function drawSoftFish(bodyWidth, bodyHeight, color) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, bodyWidth, bodyHeight, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.beginPath();
+  ctx.moveTo(bodyWidth * -0.9, 0);
+  ctx.lineTo(bodyWidth * -1.45, bodyHeight * -0.65);
+  ctx.lineTo(bodyWidth * -1.45, bodyHeight * 0.65);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = "rgba(255,255,255,0.18)";
+  ctx.beginPath();
+  ctx.ellipse(bodyWidth * 0.15, -bodyHeight * 0.18, bodyWidth * 0.56, bodyHeight * 0.34, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#496577";
+  ctx.beginPath();
+  ctx.arc(bodyWidth * 0.72, -bodyHeight * 0.08, Math.max(1.8, bodyHeight * 0.12), 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawSoftAngler(x, y) {
+  ctx.fillStyle = "#213f52";
+  ctx.beginPath();
+  ctx.ellipse(x, y - 22, 28, 24, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#ee7a57";
+  ctx.fillRect(x - 18, y - 6, 36, 28);
+
+  ctx.fillStyle = "#ffca74";
+  ctx.beginPath();
+  ctx.arc(x, y - 46, 16, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#4b6656";
+  ctx.beginPath();
+  ctx.ellipse(x, y + 16, 10, 6, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = "#6a4a2b";
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.moveTo(x + 4, y - 18);
+  ctx.lineTo(x + 4, y - 76);
+  ctx.lineTo(x + 34, y - 98);
+  ctx.stroke();
+}
+
+function drawSoftLure(x, y) {
+  ctx.fillStyle = "#fff783";
+  ctx.beginPath();
+  ctx.arc(x, y, 8, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = "#ef8b5f";
+  ctx.beginPath();
+  ctx.arc(x + 3, y - 1, 4, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 canvas.addEventListener("pointerdown", (event) => {
