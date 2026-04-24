@@ -30,28 +30,30 @@
       <section class="playfield-frame">
         <div id="game-root" aria-label="Boringtide Fishing playfield"></div>
 
-        <div id="catch-popup" class="catch-popup hidden" aria-live="polite">
-          <button id="catch-close" class="catch-close" type="button" aria-label="Close catch popup">X</button>
-          <div class="catch-popup-body">
-            <canvas id="catch-sprite" class="catch-sprite" width="88" height="48" aria-hidden="true"></canvas>
-            <div class="catch-stats">
-              <p id="catch-species">Australian Salmon</p>
-              <strong id="catch-weight">2.4 kg</strong>
-            </div>
-          </div>
+        <div id="catch-panel" class="catch-panel" aria-live="polite">
+          <canvas id="catch-sprite" class="catch-sprite catch-sprite-hidden" width="88" height="48" aria-hidden="true"></canvas>
+          <p class="catch-line">
+            <span id="catch-species">No fish yet</span>
+            <strong id="catch-weight">0.0 kg</strong>
+          </p>
+          <p class="catch-line catch-line-secondary">
+            <span>Caught <strong id="live-catch-count">0</strong></span>
+            <span>Best <strong id="live-best-fish">None</strong></span>
+            <span>Total <strong id="live-total-weight">0.0 kg</strong></span>
+          </p>
         </div>
 
         <div id="message-banner" class="message-banner">Tap the water to cast</div>
 
         <div id="start-overlay" class="overlay">
-          <div class="panel">
-            <p class="kicker">Arcade Shore Fishing</p>
-            <h2>Wait for the tide... then send it.</h2>
+          <div class="panel panel-start">
+            <canvas id="start-hero" class="start-hero" width="192" height="112" aria-hidden="true"></canvas>
+            <h1 class="game-title">Boringtide</h1>
             <p>
               Tap anywhere in the water to cast. The lure retrieves automatically. Hook as many pelagics as you can
               before the tide ends... and hope the shark never eats the lure.
             </p>
-            <button id="start-button" class="arcade-button">Start Tide</button>
+            <button id="start-button" class="arcade-button">Start Casting</button>
           </div>
         </div>
 

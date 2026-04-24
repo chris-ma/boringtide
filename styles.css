@@ -93,7 +93,7 @@ body {
 
 .panel h2,
 .game-over-line,
-.catch-popup p {
+.catch-panel p {
   margin: 0;
   font-family: "Press Start 2P", monospace;
   font-weight: 400;
@@ -131,7 +131,7 @@ body {
   border: none;
 }
 
-canvas {
+#game-root canvas {
   display: block;
   width: 100%;
   height: 100%;
@@ -161,6 +161,8 @@ canvas {
   place-items: center;
   padding: 24px;
   background: linear-gradient(rgba(20, 40, 50, 0.32), rgba(20, 40, 50, 0.38));
+  z-index: 10;
+  pointer-events: auto;
 }
 
 .panel {
@@ -171,8 +173,34 @@ canvas {
   line-height: 1.8;
 }
 
+.panel-start {
+  width: min(100%, 560px);
+  padding-top: 18px;
+  pointer-events: auto;
+}
+
 .panel p {
   margin: 14px 0 0;
+}
+
+.start-hero {
+  width: min(100%, 420px);
+  height: auto;
+  margin: 0 auto 18px;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(174, 214, 228, 0.18), rgba(22, 70, 95, 0.08));
+  border: 1px solid rgba(255, 245, 209, 0.1);
+  pointer-events: none;
+}
+
+.game-title {
+  margin: 0;
+  font-size: clamp(1rem, 5vw, 1.7rem);
+  line-height: 1.2;
+  color: #fff0be;
+  text-shadow: 0 4px 0 rgba(19, 38, 51, 0.45);
 }
 
 .panel-end {
@@ -202,46 +230,24 @@ canvas {
   transform: translateY(1px);
 }
 
-.catch-popup,
+.catch-panel,
 .message-banner {
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
 }
 
-.catch-popup {
-  top: 14%;
-  min-width: min(76%, 420px);
-  padding: 18px 18px 16px;
-  border-radius: 24px;
-  text-align: center;
-  color: var(--ink);
-  background: rgba(247, 240, 215, 0.94);
-  border: 1px solid rgba(48, 77, 91, 0.16);
-  box-shadow: 0 18px 40px rgba(16, 33, 48, 0.18);
-  animation: catch-pop 250ms ease-out;
-}
-
-.catch-close {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 26px;
-  height: 26px;
-  border: 1px solid rgba(48, 77, 91, 0.2);
-  background: rgba(255, 255, 255, 0.45);
-  color: var(--ink);
-  font: inherit;
-  font-size: 0.46rem;
-  line-height: 1;
+.catch-panel {
+  bottom: max(10px, env(safe-area-inset-bottom));
+  width: min(calc(100% - 24px), 720px);
   padding: 0;
-}
-
-.catch-popup-body {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
+  color: var(--ink);
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  display: grid;
+  gap: 4px;
+  pointer-events: none;
 }
 
 .catch-sprite {
@@ -253,24 +259,42 @@ canvas {
   flex: 0 0 auto;
 }
 
-.catch-stats {
-  text-align: left;
+.catch-sprite-hidden {
+  display: none;
 }
 
-.catch-popup p {
-  font-size: 0.72rem;
+.catch-panel p {
+  font-size: 0.52rem;
   line-height: 1.5;
+  margin: 0;
+  text-align: center;
+  color: rgba(247, 240, 211, 0.92);
+  text-shadow: 0 2px 0 rgba(19, 38, 51, 0.6);
 }
 
-.catch-popup strong {
-  display: block;
-  margin-top: 6px;
-  font-size: 1rem;
+.catch-panel strong {
+  display: inline;
+  margin-top: 0;
+  font-size: inherit;
   line-height: 1.4;
 }
 
+.catch-line {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.catch-line-secondary {
+  gap: 14px;
+  font-size: 0.42rem;
+  opacity: 0.9;
+}
+
 .message-banner {
-  bottom: max(18px, env(safe-area-inset-bottom));
+  bottom: calc(max(10px, env(safe-area-inset-bottom)) + 40px);
   width: min(calc(100% - 28px), 520px);
   padding: 16px 22px;
   border-radius: 40px;
@@ -355,36 +379,38 @@ canvas {
     border-radius: 0;
   }
 
-  canvas {
+  #game-root canvas {
     height: 100dvh;
     min-height: 100dvh;
   }
 
-  .catch-popup {
-    top: 14%;
-    min-width: calc(100% - 20px);
-    padding: 14px 12px;
+  .catch-panel {
+    width: calc(100% - 18px);
   }
 
-  .catch-popup-body {
-    gap: 10px;
-  }
-
-  .catch-sprite {
-    width: 96px;
-    height: 54px;
-  }
-
-  .catch-popup strong {
-    font-size: 0.92rem;
+  .catch-panel strong {
+    font-size: inherit;
   }
 
   .panel {
     padding: 20px 16px;
   }
 
+  .panel-start {
+    padding-top: 16px;
+  }
+
+  .start-hero {
+    width: min(100%, 320px);
+    margin-bottom: 14px;
+  }
+
+  .game-title {
+    font-size: 0.96rem;
+  }
+
   .message-banner {
-    bottom: max(12px, env(safe-area-inset-bottom));
+    bottom: calc(max(12px, env(safe-area-inset-bottom)) + 44px);
     width: calc(100% - 18px);
     padding: 14px 16px;
     font-size: 0.54rem;
