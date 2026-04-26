@@ -86,6 +86,8 @@ class BoringtideScene extends Phaser.Scene {
     this.photoMoment = null;
     this.hypeTimer = 0;
     this.lastFightComment = "";
+    this.shorelineProfile = [];
+    this.currentDirection = 1;
   }
 
   create() {
@@ -361,15 +363,14 @@ class BoringtideScene extends Phaser.Scene {
     this.background.setScale(GAME_WIDTH / 180, GAME_HEIGHT / 280);
     this.waterOverlay = this.add.graphics();
     this.waterOverlay.setDepth(3);
+    this.shorelineGraphics = this.add.graphics();
+    this.shorelineGraphics.setDepth(4);
+    this.foamGraphics = this.add.graphics();
+    this.foamGraphics.setDepth(4.2);
     this.drawWaterOverlay();
   }
 
   createEntities() {
-    this.rockLedge = this.add.image(GAME_WIDTH * 0.5, SHORE_Y - 14, "rock-ledge");
-    this.rockLedge.setScale(12.5, 5.2);
-    this.rockLedge.setOrigin(0.5, 0.5);
-    this.rockLedge.setDepth(4);
-
     this.player = this.add.image(GAME_WIDTH * 0.46, SHORE_Y - 118, "angler-main");
     this.player.setScale(4);
     this.player.setOrigin(0.5, 0.5);
@@ -519,6 +520,9 @@ class BoringtideScene extends Phaser.Scene {
   resetSession() {
     this.stopReelScream();
     this.timeLeft = SESSION_SECONDS;
+    this.currentDirection = Math.random() > 0.5 ? 1 : -1;
+    this.generateShorelineProfile();
+    this.drawShoreline();
     this.stats = {
       catches: 0,
       totalWeight: 0,
@@ -549,12 +553,20 @@ class BoringtideScene extends Phaser.Scene {
   }
 
   resetSideAnglers() {
+    const leftBaseX = GAME_WIDTH * 0.24;
+    const rightBaseX = GAME_WIDTH * 0.74;
+    const leftBaseY = this.getSwimBoundaryY(leftBaseX) + 22;
+    const rightBaseY = this.getSwimBoundaryY(rightBaseX) + 22;
     this.sideAnglers.forEach((angler, index) => {
       angler.state = "waiting";
       angler.timer = 0.9 + index * 0.7;
       angler.progress = 0;
       angler.castDuration = Phaser.Math.FloatBetween(0.34, 0.52);
       angler.holdDuration = Phaser.Math.FloatBetween(0.45, 1.2);
+      angler.baseX = index === 0 ? leftBaseX : rightBaseX;
+      angler.baseY = index === 0 ? leftBaseY : rightBaseY;
+      angler.sprite.x = angler.baseX;
+      angler.sprite.y = angler.baseY;
       angler.castOrigin.set(
         angler.sprite.x + (angler.flip ? -10 : 10),
         angler.sprite.y - 18
@@ -563,9 +575,12 @@ class BoringtideScene extends Phaser.Scene {
       angler.castTarget.copy(angler.castOrigin);
       angler.cheerTimer = 0;
       angler.cheerText.setVisible(false);
-      angler.sprite.x = angler.baseX;
-      angler.sprite.y = angler.baseY;
+      angler.cheerText.setPosition(angler.baseX, angler.baseY - 78);
     });
+    this.player.x = GAME_WIDTH * 0.46;
+    this.player.y = this.getSwimBoundaryY(this.player.x) + 18;
+    this.lure.setPosition(this.player.x, this.player.y - 24);
+    this.lureTarget.set(this.player.x, this.player.y - 24);
   }
 
   clearFish() {
@@ -796,8 +811,12 @@ class BoringtideScene extends Phaser.Scene {
     }
   }
 
-  triggerSideAnglerCheer(weight) {
-    const shout = weight >= 8 ? "OOOHH!" : "YEW!";
+  triggerSideAnglerCheer(weight, shouts) {
+    const shout = shouts
+      ? Phaser.Utils.Array.GetRandom(shouts)
+      : weight >= 8
+        ? "OOOHH!"
+        : "YEW!";
     this.sideAnglers.forEach((angler, index) => {
       angler.cheerTimer = 0.8 + index * 0.12;
       angler.cheerText.setText(shout);
@@ -1124,6 +1143,7 @@ class BoringtideScene extends Phaser.Scene {
     fight.fish.hooked = false;
     this.showCatchPopup(fight.species, fight.weight);
     this.addBurst(this.lure.x, this.lure.y, 18, fight.color);
+    this.playCatchCelebration(fight.weight);
     if (fight.isPhotoFish) {
       this.startPhotoMoment(fight);
     } else {
@@ -1161,6 +1181,15 @@ class BoringtideScene extends Phaser.Scene {
       this.playAnglerYell(fight.isHugeFish ? Math.max(fight.weight, 8) : Math.max(fight.weight, 5));
     }
     this.hypeTimer = fight.isHugeFish ? 0.7 : 1.05;
+  }
+
+  playCatchCelebration(weight) {
+    const cheers = weight >= 8
+      ? ["WOOO!", "YEEEW!", "GET IN!", "HOW GOOD!"]
+      : ["HAHA!", "YEAH!", "YEWWW!", "ONYA!"];
+    this.triggerSideAnglerCheer(weight, cheers);
+    this.showShaka(weight >= 8 ? "YEEEW!" : "HAHA!", weight >= 8);
+    this.playAnglerYell(Math.max(weight + 1.5, 5));
   }
 
   startPhotoMoment(fight) {
@@ -1258,6 +1287,62 @@ class BoringtideScene extends Phaser.Scene {
         onComplete: () => second.destroy(),
       });
     });
+  }
+
+  generateShorelineProfile() {
+    const crest = Phaser.Math.Between(-40, 24);
+    this.shorelineProfile = [
+      { x: 0, y: SHORE_Y - Phaser.Math.Between(92, 118) },
+      { x: GAME_WIDTH * 0.16, y: SHORE_Y - Phaser.Math.Between(132, 168) },
+      { x: GAME_WIDTH * 0.31, y: SHORE_Y - Phaser.Math.Between(188, 236) },
+      { x: GAME_WIDTH * 0.46, y: SHORE_Y - Phaser.Math.Between(270, 312) + crest },
+      { x: GAME_WIDTH * 0.62, y: SHORE_Y - Phaser.Math.Between(214, 258) },
+      { x: GAME_WIDTH * 0.78, y: SHORE_Y - Phaser.Math.Between(152, 192) },
+      { x: GAME_WIDTH, y: SHORE_Y - Phaser.Math.Between(118, 142) },
+    ];
+  }
+
+  drawShoreline() {
+    if (!this.shorelineProfile.length) {
+      return;
+    }
+    this.shorelineGraphics.clear();
+    this.foamGraphics.clear();
+
+    this.shorelineGraphics.fillStyle(0x4d5961, 1);
+    this.shorelineGraphics.beginPath();
+    this.shorelineGraphics.moveTo(this.shorelineProfile[0].x, this.shorelineProfile[0].y);
+    this.shorelineProfile.slice(1).forEach((point) => this.shorelineGraphics.lineTo(point.x, point.y));
+    this.shorelineGraphics.lineTo(GAME_WIDTH, GAME_HEIGHT);
+    this.shorelineGraphics.lineTo(0, GAME_HEIGHT);
+    this.shorelineGraphics.closePath();
+    this.shorelineGraphics.fillPath();
+
+    this.shorelineGraphics.fillStyle(0x69777d, 1);
+    this.shorelineProfile.forEach((point, index) => {
+      if (index === this.shorelineProfile.length - 1) {
+        return;
+      }
+      const next = this.shorelineProfile[index + 1];
+      const midX = Phaser.Math.Linear(point.x, next.x, 0.45);
+      const midY = Phaser.Math.Linear(point.y, next.y, 0.45);
+      this.shorelineGraphics.fillRect(midX - 26, midY - 10, 30, 6);
+    });
+
+    this.shorelineGraphics.fillStyle(0x39454b, 1);
+    this.shorelineGraphics.fillRect(0, SHORE_Y + 8, GAME_WIDTH, GAME_HEIGHT - SHORE_Y);
+
+    this.foamGraphics.lineStyle(3, 0xd7eef6, 0.48);
+    this.foamGraphics.beginPath();
+    this.foamGraphics.moveTo(this.shorelineProfile[0].x, this.shorelineProfile[0].y - 3);
+    this.shorelineProfile.slice(1).forEach((point, index) => {
+      const prev = this.shorelineProfile[index];
+      const midX = Phaser.Math.Linear(prev.x, point.x, 0.5);
+      const midY = Phaser.Math.Linear(prev.y, point.y, 0.5) - 5;
+      this.foamGraphics.lineTo(midX, midY);
+      this.foamGraphics.lineTo(point.x, point.y - 3);
+    });
+    this.foamGraphics.strokePath();
   }
 
   finishPhotoMoment() {
@@ -1421,14 +1506,38 @@ class BoringtideScene extends Phaser.Scene {
     this.waterOverlay.fillRect(0, WATERLINE_Y + 10, GAME_WIDTH, SHORE_Y - WATERLINE_Y - 18);
 
     this.waterOverlay.fillStyle(0x9ed6e4, 0.08);
-    for (let i = 0; i < 5; i += 1) {
-      const y = WATERLINE_Y + 34 + i * 92;
-      const offset = Math.sin(time * 0.9 + i) * 22;
+    for (let i = 0; i < 6; i += 1) {
+      const y = WATERLINE_Y + 28 + i * 74;
+      const offset = Math.sin(time * 1.2 + i * 0.7) * 24;
       this.waterOverlay.fillRect(0, y, GAME_WIDTH, 2);
       for (let x = -40; x < GAME_WIDTH + 40; x += 64) {
         this.waterOverlay.fillRect(x + offset, y - 6, 18, 1);
         this.waterOverlay.fillRect(x + 20 + offset, y - 3, 12, 1);
       }
+    }
+
+    this.waterOverlay.lineStyle(2, 0xc2e8f0, 0.12);
+    for (let i = 0; i < 7; i += 1) {
+      const baseY = WATERLINE_Y + 54 + i * 66;
+      this.waterOverlay.beginPath();
+      for (let x = -20; x <= GAME_WIDTH + 20; x += 20) {
+        const drift = this.currentDirection * time * 42;
+        const y = baseY + Math.sin((x + drift) * 0.022 + i) * 6;
+        if (x === -20) {
+          this.waterOverlay.moveTo(x, y);
+        } else {
+          this.waterOverlay.lineTo(x, y);
+        }
+      }
+      this.waterOverlay.strokePath();
+    }
+
+    this.waterOverlay.fillStyle(0xd5eef5, 0.1);
+    for (let i = 0; i < 18; i += 1) {
+      const progress = ((time * 34 * this.currentDirection) + i * 47) % (GAME_WIDTH + 120);
+      const x = this.currentDirection > 0 ? progress - 60 : GAME_WIDTH - progress + 60;
+      const y = WATERLINE_Y + 80 + (i % 6) * 84 + Math.sin(time * 1.8 + i) * 10;
+      this.waterOverlay.fillTriangle(x, y, x - 10 * this.currentDirection, y - 4, x - 10 * this.currentDirection, y + 4);
     }
 
     this.waterOverlay.fillGradientStyle(0x7bc1d3, 0x7bc1d3, 0x1d5f80, 0x1d5f80, 0.1);
@@ -1460,15 +1569,17 @@ class BoringtideScene extends Phaser.Scene {
   }
 
   getSwimBoundaryY(x) {
-    const points = [
-      { x: 0, y: SHORE_Y - 110 },
-      { x: GAME_WIDTH * 0.16, y: SHORE_Y - 150 },
-      { x: GAME_WIDTH * 0.3, y: SHORE_Y - 220 },
-      { x: GAME_WIDTH * 0.46, y: SHORE_Y - 300 },
-      { x: GAME_WIDTH * 0.62, y: SHORE_Y - 240 },
-      { x: GAME_WIDTH * 0.78, y: SHORE_Y - 170 },
-      { x: GAME_WIDTH, y: SHORE_Y - 130 },
-    ];
+    const points = this.shorelineProfile.length
+      ? this.shorelineProfile
+      : [
+          { x: 0, y: SHORE_Y - 110 },
+          { x: GAME_WIDTH * 0.16, y: SHORE_Y - 150 },
+          { x: GAME_WIDTH * 0.3, y: SHORE_Y - 220 },
+          { x: GAME_WIDTH * 0.46, y: SHORE_Y - 300 },
+          { x: GAME_WIDTH * 0.62, y: SHORE_Y - 240 },
+          { x: GAME_WIDTH * 0.78, y: SHORE_Y - 170 },
+          { x: GAME_WIDTH, y: SHORE_Y - 130 },
+        ];
 
     if (x <= points[0].x) {
       return points[0].y;

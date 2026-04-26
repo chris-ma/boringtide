@@ -1,0 +1,216 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/main.gd" id="1_xfh5s"]
+[ext_resource type="Shader" path="res://shaders/water.gdshader" id="2_8ac0q"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_r2j7r"]
+shader = ExtResource("2_8ac0q")
+shader_parameter/current_strength = 0.035
+shader_parameter/ripple_strength = 0.018
+shader_parameter/foam_color = Color(0.86, 0.98, 1, 0.08)
+
+[node name="Main" type="Node2D"]
+script = ExtResource("1_xfh5s")
+
+[node name="WaterFX" type="Sprite2D" parent="."]
+position = Vector2(450, 720)
+scale = Vector2(3.52, 4.25)
+material = SubResource("ShaderMaterial_r2j7r")
+self_modulate = Color(1, 1, 1, 0.65)
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position = Vector2(450, 700)
+enabled = true
+
+[node name="AmbientFX" type="Node2D" parent="."]
+
+[node name="SeaMist" type="GPUParticles2D" parent="AmbientFX"]
+position = Vector2(450, 1160)
+emitting = false
+
+[node name="SurfaceSparkles" type="GPUParticles2D" parent="AmbientFX"]
+position = Vector2(450, 260)
+emitting = false
+
+[node name="HookupBurst" type="GPUParticles2D" parent="AmbientFX"]
+position = Vector2(450, 700)
+emitting = false
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="SceneAnimations" type="AnimationPlayer" parent="UI"]
+
+[node name="HUD" type="Control" parent="UI"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+mouse_filter = 2
+
+[node name="TidePanel" type="Panel" parent="UI/HUD"]
+offset_left = 18.0
+offset_top = 18.0
+offset_right = 180.0
+offset_bottom = 78.0
+
+[node name="TimerLabel" type="Label" parent="UI/HUD/TidePanel"]
+offset_left = 16.0
+offset_top = 10.0
+offset_right = 126.0
+offset_bottom = 36.0
+theme_override_font_sizes/font_size = 28
+text = "2:30"
+
+[node name="TideBarBg" type="ColorRect" parent="UI/HUD/TidePanel"]
+offset_left = 16.0
+offset_top = 42.0
+offset_right = 142.0
+offset_bottom = 48.0
+color = Color(0.15, 0.28, 0.34, 0.9)
+
+[node name="TideBarFill" type="ColorRect" parent="UI/HUD/TidePanel"]
+offset_left = 16.0
+offset_top = 42.0
+offset_right = 142.0
+offset_bottom = 48.0
+color = Color(0.62, 0.84, 0.89, 1)
+
+[node name="CatchLabel" type="Label" parent="UI/HUD"]
+offset_left = 26.0
+offset_top = 1312.0
+offset_right = 520.0
+offset_bottom = 1338.0
+theme_override_font_sizes/font_size = 18
+text = "No fish yet  0.0 kg"
+
+[node name="StatsLabel" type="Label" parent="UI/HUD"]
+offset_left = 26.0
+offset_top = 1342.0
+offset_right = 760.0
+offset_bottom = 1364.0
+theme_override_font_sizes/font_size = 14
+text = "Caught 0   Best None   Total 0.0 kg"
+
+[node name="MessagePanel" type="Panel" parent="UI/HUD"]
+offset_left = 170.0
+offset_top = 1224.0
+offset_right = 730.0
+offset_bottom = 1270.0
+
+[node name="MessageLabel" type="Label" parent="UI/HUD/MessagePanel"]
+offset_left = 16.0
+offset_top = 12.0
+offset_right = 538.0
+offset_bottom = 34.0
+theme_override_font_sizes/font_size = 16
+horizontal_alignment = 1
+text = "Tap the water to cast"
+
+[node name="TitleScreen" type="Control" parent="UI"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="TitlePanel" type="Panel" parent="UI/TitleScreen"]
+offset_left = 110.0
+offset_top = 150.0
+offset_right = 790.0
+offset_bottom = 1220.0
+
+[node name="Hero" type="TextureRect" parent="UI/TitleScreen/TitlePanel"]
+offset_left = 60.0
+offset_top = 90.0
+offset_right = 620.0
+offset_bottom = 420.0
+stretch_mode = 6
+
+[node name="TitleLabel" type="Label" parent="UI/TitleScreen/TitlePanel"]
+offset_left = 104.0
+offset_top = 470.0
+offset_right = 564.0
+offset_bottom = 532.0
+theme_override_font_sizes/font_size = 54
+horizontal_alignment = 1
+text = "BORINGTIDE"
+
+[node name="TaglineLabel" type="Label" parent="UI/TitleScreen/TitlePanel"]
+offset_left = 90.0
+offset_top = 530.0
+offset_right = 590.0
+offset_bottom = 560.0
+theme_override_font_sizes/font_size = 16
+horizontal_alignment = 1
+text = "For those moments when the fishing is slow..."
+
+[node name="InstructionsPanel" type="Panel" parent="UI/TitleScreen/TitlePanel"]
+offset_left = 60.0
+offset_top = 610.0
+offset_right = 620.0
+offset_bottom = 790.0
+
+[node name="InstructionsLabel" type="Label" parent="UI/TitleScreen/TitlePanel/InstructionsPanel"]
+offset_left = 28.0
+offset_top = 28.0
+offset_right = 528.0
+offset_bottom = 152.0
+theme_override_font_sizes/font_size = 18
+autowrap_mode = 3
+text = "Tap anywhere in the water to cast.\nThe lure retrieves automatically.\nHook pelagics before the tide ends.\nAvoid the shark and survive the tide."
+
+[node name="StartButton" type="Button" parent="UI/TitleScreen/TitlePanel"]
+offset_left = 160.0
+offset_top = 962.0
+offset_right = 520.0
+offset_bottom = 1040.0
+theme_override_font_sizes/font_size = 20
+text = "START CASTING"
+
+[node name="EndScreen" type="Control" parent="UI"]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+
+[node name="EndPanel" type="Panel" parent="UI/EndScreen"]
+offset_left = 150.0
+offset_top = 360.0
+offset_right = 750.0
+offset_bottom = 720.0
+
+[node name="EndTitle" type="Label" parent="UI/EndScreen/EndPanel"]
+offset_left = 64.0
+offset_top = 56.0
+offset_right = 534.0
+offset_bottom = 96.0
+theme_override_font_sizes/font_size = 32
+horizontal_alignment = 1
+text = "TIDE FINISHED"
+
+[node name="EndStats" type="Label" parent="UI/EndScreen/EndPanel"]
+offset_left = 60.0
+offset_top = 150.0
+offset_right = 540.0
+offset_bottom = 270.0
+theme_override_font_sizes/font_size = 20
+autowrap_mode = 3
+horizontal_alignment = 1
+text = "Catch 0\nBest None\nTotal 0.0 kg"
+
+[node name="EndHint" type="Label" parent="UI/EndScreen/EndPanel"]
+offset_left = 70.0
+offset_top = 290.0
+offset_right = 530.0
+offset_bottom = 320.0
+theme_override_font_sizes/font_size = 18
+horizontal_alignment = 1
+text = "Click anywhere to fish another tide"
+
+[node name="PhotoFlash" type="ColorRect" parent="UI"]
+visible = false
+color = Color(1, 1, 1, 0)
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
